@@ -550,8 +550,19 @@ function connectFirebase() {
   let cfg;
   try {
     const match = raw.match(/\{[\s\S]*\}/);
-    cfg = JSON.parse(match ? match[0] : raw);
-  } catch(e) { toast('JSON inválido', 'err'); return; }
+    if (!match) { toast('No se encontró configuración válida', 'err'); return; }
+    let json = match[0];
+    // Unquoted keys: apiKey: => "apiKey":
+    json = json.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+    // Curly/smart quotes => straight quotes
+    json = json.replace(/[“”„‟‘’]/g, '"');
+    // Trailing commas
+    json = json.replace(/,\s*}/g, '}');
+    cfg = JSON.parse(json);
+    if (!cfg.apiKey || !cfg.projectId) { toast('Falta apiKey o projectId', 'err'); return; }
+  } catch(e) {
+    toast('Error: ' + e.message, 'err'); return;
+  }
   localStorage.setItem('hd_fb', JSON.stringify(cfg));
   loadFirebaseSDK(cfg);
 }
