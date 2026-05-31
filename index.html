@@ -1,0 +1,1278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HD Crédit — Control de Pagos</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+:root{
+  --bg:#0a0c0f;--surface:#111318;--card:#161a21;--border:#222630;--border2:#2a2f3d;
+  --text:#e8eaf0;--muted:#6b7280;--accent:#00e5a0;--accent2:#00b87a;
+  --warn:#ffb800;--danger:#ff4560;--info:#3b82f6;--purple:#8b5cf6;
+  --radius:12px;--radius-lg:20px;--shadow:0 4px 24px rgba(0,0,0,.5);
+  --trans:.2s cubic-bezier(.4,0,.2,1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+button{cursor:pointer;border:none;background:none;font-family:inherit}
+input,select,textarea{font-family:inherit;outline:none}
+a{text-decoration:none;color:inherit}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:99px}
+
+/* LOADER */
+#loader{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .4s ease}
+#loader.hide{opacity:0;pointer-events:none}
+.loader-logo{font-family:'Syne',sans-serif;font-size:3.2rem;font-weight:800;color:var(--accent);letter-spacing:-2px}
+.loader-sub{color:var(--muted);font-size:.8rem;margin-top:8px;font-family:'DM Mono',monospace;letter-spacing:.1em}
+.loader-bar{width:180px;height:3px;background:var(--border);border-radius:99px;margin-top:32px;overflow:hidden}
+.loader-fill{height:100%;background:var(--accent);border-radius:99px;width:0;transition:width 1.6s ease-out}
+
+/* TOAST */
+#toasts{position:fixed;top:20px;right:20px;z-index:8888;display:flex;flex-direction:column;gap:8px}
+.toast{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border2);padding:12px 16px;border-radius:var(--radius);font-size:.85rem;box-shadow:var(--shadow);animation:slideIn .3s ease;min-width:260px;max-width:320px}
+.toast.ok{border-left:3px solid var(--accent)}
+.toast.err{border-left:3px solid var(--danger)}
+.toast.wa{border-left:3px solid #25d366}
+.toast.wrn{border-left:3px solid var(--warn)}
+@keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;z-index:7000;opacity:0;pointer-events:none;transition:opacity var(--trans);padding:16px}
+.overlay.open{opacity:1;pointer-events:all}
+.modal{background:var(--card);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:28px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;transform:scale(.95) translateY(10px);transition:transform var(--trans)}
+.overlay.open .modal{transform:scale(1) translateY(0)}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.modal-title{font-family:'Syne',sans-serif;font-size:1.15rem;font-weight:700}
+.btn-x{width:32px;height:32px;border-radius:50%;background:var(--border);color:var(--muted);display:flex;align-items:center;justify-content:center;transition:all var(--trans);font-size:.9rem}
+.btn-x:hover{background:var(--danger);color:#fff}
+
+/* FORM */
+.fg{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.fg label{font-size:.75rem;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.fc{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 14px;color:var(--text);font-size:.9rem;transition:border-color var(--trans);width:100%}
+.fc:focus{border-color:var(--accent)}
+select.fc option{background:var(--surface)}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.full{grid-column:1/-1}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:var(--radius);font-size:.85rem;font-weight:500;transition:all var(--trans);white-space:nowrap;cursor:pointer;border:none;font-family:inherit}
+.btn-p{background:var(--accent);color:#000;font-weight:700}
+.btn-p:hover{background:var(--accent2);transform:translateY(-1px)}
+.btn-s{background:var(--border);color:var(--text)}
+.btn-s:hover{background:var(--border2)}
+.btn-d{background:rgba(255,69,96,.12);color:var(--danger);border:1px solid rgba(255,69,96,.25)}
+.btn-d:hover{background:var(--danger);color:#fff}
+.btn-w{background:rgba(255,184,0,.12);color:var(--warn);border:1px solid rgba(255,184,0,.25)}
+.btn-wa{background:rgba(37,211,102,.12);color:#25d366;border:1px solid rgba(37,211,102,.25)}
+.btn-wa:hover{background:#25d366;color:#fff}
+.btn-sm{padding:6px 11px;font-size:.78rem}
+.btn-ic{padding:7px;border-radius:8px}
+
+/* SIDEBAR */
+#sidebar{position:fixed;left:0;top:0;bottom:0;width:238px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;z-index:500;transition:transform var(--trans)}
+.sb-logo{padding:22px 20px 18px;border-bottom:1px solid var(--border)}
+.sb-brand{font-family:'Syne',sans-serif;font-size:1.45rem;font-weight:800;color:var(--accent);letter-spacing:-1px}
+.sb-sub{font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:2px}
+.sb-nav{flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
+.sb-sec{font-size:.63rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;padding:10px 8px 5px;font-weight:700}
+.ni{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius);color:var(--muted);font-size:.87rem;font-weight:500;transition:all var(--trans);cursor:pointer;user-select:none}
+.ni i{width:17px;text-align:center;font-size:.88rem}
+.ni:hover{background:var(--card);color:var(--text)}
+.ni.on{background:rgba(0,229,160,.1);color:var(--accent)}
+.ni .nb{margin-left:auto;background:var(--danger);color:#fff;font-size:.63rem;padding:2px 6px;border-radius:99px;font-weight:700}
+.sb-foot{padding:14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;color:#000;flex-shrink:0}
+.ui-name{font-size:.85rem;font-weight:600}
+.ui-role{font-size:.7rem;color:var(--muted)}
+
+/* HAMBURGER */
+#ham{display:none;position:fixed;top:14px;left:14px;z-index:600;width:40px;height:40px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer}
+#ham span{width:18px;height:2px;background:var(--text);border-radius:2px;transition:all var(--trans)}
+#sbov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:490}
+
+/* MAIN */
+#main{margin-left:238px;min-height:100vh;transition:margin var(--trans)}
+.ph{padding:26px 30px 0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.pt{font-family:'Syne',sans-serif;font-size:1.55rem;font-weight:800;letter-spacing:-.5px}
+.ps{font-size:.8rem;color:var(--muted);margin-top:3px}
+.ha{display:flex;gap:8px;flex-wrap:wrap}
+.ca{padding:22px 30px 40px}
+
+/* VIEWS */
+.view{display:none}
+.view.on{display:block;animation:fu .3s ease}
+@keyframes fu{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* STAT CARDS */
+.sg{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:24px}
+.sc{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;position:relative;overflow:hidden;transition:transform var(--trans),border-color var(--trans)}
+.sc:hover{transform:translateY(-2px);border-color:var(--border2)}
+.sc::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent)}
+.sc.w::before{background:var(--warn)}
+.sc.d::before{background:var(--danger)}
+.sc.i::before{background:var(--info)}
+.sc.p::before{background:var(--purple)}
+.si{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;margin-bottom:14px;background:rgba(0,229,160,.1);color:var(--accent)}
+.sc.w .si{background:rgba(255,184,0,.1);color:var(--warn)}
+.sc.d .si{background:rgba(255,69,96,.1);color:var(--danger)}
+.sc.i .si{background:rgba(59,130,246,.1);color:var(--info)}
+.sc.p .si{background:rgba(139,92,246,.1);color:var(--purple)}
+.sv{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;line-height:1}
+.sl{font-size:.76rem;color:var(--muted);margin-top:4px}
+
+/* TABLE */
+.tw{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.tt{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sb{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 12px;flex:1;min-width:180px}
+.sb i{color:var(--muted);font-size:.82rem}
+.sb input{background:none;border:none;color:var(--text);font-size:.87rem;flex:1;min-width:0}
+.sb input::placeholder{color:var(--muted)}
+.fsel{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 12px;color:var(--text);font-size:.83rem}
+.ts{overflow-x:auto;max-height:500px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:.84rem}
+thead th{background:var(--surface);padding:11px 15px;text-align:left;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;position:sticky;top:0;z-index:10;white-space:nowrap;border-bottom:1px solid var(--border)}
+thead th:first-child{position:sticky;left:0;z-index:20;background:var(--surface)}
+tbody td{padding:11px 15px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap}
+tbody td:first-child{position:sticky;left:0;z-index:5;background:var(--card);font-weight:600}
+tbody tr:hover td{background:rgba(255,255,255,.02)}
+tbody tr:hover td:first-child{background:rgba(255,255,255,.025)}
+tbody tr:last-child td{border-bottom:none}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;font-size:.71rem;font-weight:700}
+.bg{background:rgba(0,229,160,.12);color:var(--accent)}
+.br{background:rgba(255,69,96,.12);color:var(--danger)}
+.by{background:rgba(255,184,0,.12);color:var(--warn)}
+.bb{background:var(--border);color:var(--muted)}
+.bi{background:rgba(59,130,246,.12);color:var(--info)}
+
+/* PROGRESS */
+.pb{background:var(--border);border-radius:99px;height:6px;overflow:hidden;min-width:70px}
+.pf{height:100%;border-radius:99px;transition:width .6s ease;background:var(--accent)}
+.pf.w{background:var(--warn)}
+.pf.d{background:var(--danger)}
+
+/* CHECKLIST */
+.ch-hd{display:flex;align-items:center;gap:12px;padding:18px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.qsel{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 13px}
+.qsel select{background:none;border:none;color:var(--text);font-size:.9rem;font-weight:700;font-family:'Syne',sans-serif}
+.ci{display:grid;grid-template-columns:40px 1fr auto auto auto;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--border);transition:background var(--trans)}
+.ci:last-child{border-bottom:none}
+.ci:hover{background:rgba(255,255,255,.02)}
+.ci.paid{opacity:.65}
+.cn{font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace;text-align:center}
+.cname{font-weight:700;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.camt{font-family:'DM Mono',monospace;font-size:.84rem;color:var(--accent);text-align:right}
+.cdet{font-size:.73rem;color:var(--muted);font-family:'DM Mono',monospace;text-align:right}
+.pb2{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--border2);transition:all var(--trans);font-size:.88rem;flex-shrink:0;cursor:pointer;background:none}
+.pb2.u:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,229,160,.1)}
+.pb2.ck{border-color:var(--accent);background:var(--accent);color:#000}
+.pb2.lt{border-color:var(--danger);color:var(--danger)}
+.pb2.lt:hover{background:var(--danger);color:#fff}
+
+/* DASH GRID */
+.dg{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px}
+.dc{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px}
+.dct{font-family:'Syne',sans-serif;font-weight:700;margin-bottom:14px;font-size:.93rem;display:flex;align-items:center;gap:8px}
+.dct i{color:var(--accent)}
+.mi{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.mi:last-child{border-bottom:none}
+.mav{width:34px;height:34px;border-radius:50%;background:rgba(255,69,96,.14);border:1px solid rgba(255,69,96,.3);display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:700;color:var(--danger);flex-shrink:0}
+.mn{font-weight:600;font-size:.87rem}
+.md{font-family:'DM Mono',monospace;font-size:.75rem;color:var(--danger)}
+
+/* MINI CHART */
+.mc{height:150px;display:flex;align-items:flex-end;gap:5px;padding:8px 0}
+.bc{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bv{width:100%;border-radius:6px 6px 0 0;background:linear-gradient(to top,var(--accent2),var(--accent));transition:height .6s ease;min-height:4px}
+.bl{font-size:.62rem;color:var(--muted);font-family:'DM Mono',monospace}
+
+/* ESTADO CUENTA MODAL */
+.ec-card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+.ec-title{font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
+.ec-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)}
+.ec-row:last-child{border-bottom:none}
+.ec-lbl{font-size:.83rem;color:var(--muted)}
+.ec-val{font-family:'DM Mono',monospace;font-size:.88rem;font-weight:600}
+.ec-timeline{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px}
+.ec-q{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;font-family:'DM Mono',monospace}
+.ec-q.ck{background:var(--accent);color:#000}
+.ec-q.pd{background:var(--border);color:var(--muted)}
+.ec-q.nx{background:rgba(255,184,0,.2);border:1px solid var(--warn);color:var(--warn)}
+
+/* FIREBASE CONFIG */
+#fb-cfg{position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:6000;padding:20px}
+.cfg-box{background:var(--card);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:36px;width:100%;max-width:540px}
+.cfg-logo{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;color:var(--accent);margin-bottom:4px}
+.cfg-desc{color:var(--muted);font-size:.86rem;line-height:1.6;margin-bottom:24px}
+.cfg-steps{background:var(--surface);border-radius:var(--radius);padding:14px;margin-bottom:22px}
+.cstep{display:flex;gap:10px;padding:8px 0;font-size:.81rem;line-height:1.5;border-bottom:1px solid var(--border)}
+.cstep:last-child{border-bottom:none}
+.csn{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#000;font-weight:700;font-size:.7rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.cstep a{color:var(--accent);text-decoration:underline}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  #sidebar{transform:translateX(-100%)}
+  #sidebar.open{transform:translateX(0)}
+  #ham{display:flex !important}
+  #sbov.open{display:block}
+  #main{margin-left:0}
+  .ph{padding:62px 16px 0}
+  .ca{padding:14px 14px 40px}
+  .dg{grid-template-columns:1fr}
+  .fgrid{grid-template-columns:1fr}
+  .ci{grid-template-columns:32px 1fr auto}
+  .cdet{display:none}
+}
+@media(max-width:480px){
+  .sg{grid-template-columns:1fr 1fr}
+  .ci{padding:11px 12px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader">
+  <div class="loader-logo">HD Crédit</div>
+  <div class="loader-sub">SISTEMA DE CONTROL DE PAGOS</div>
+  <div class="loader-bar"><div class="loader-fill" id="lf"></div></div>
+</div>
+
+<!-- TOASTS -->
+<div id="toasts"></div>
+
+<!-- FIREBASE CONFIG -->
+<div id="fb-cfg" style="display:flex">
+  <div class="cfg-box">
+    <div class="cfg-logo">HD Crédit</div>
+    <div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-bottom:12px">CONFIGURACIÓN INICIAL</div>
+    <p class="cfg-desc">Conecta Firebase para sincronización en la nube y multi-dispositivo. Solo se configura una vez.</p>
+    <div class="cfg-steps">
+      <div class="cstep"><div class="csn">1</div><div>Ve a <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> y crea un proyecto.</div></div>
+      <div class="cstep"><div class="csn">2</div><div>Agrega una app web (&lt;/&gt;), copia el objeto <code style="color:var(--accent)">firebaseConfig</code>.</div></div>
+      <div class="cstep"><div class="csn">3</div><div>En Firestore → Reglas pon: <code style="color:var(--warn)">allow read, write: if true;</code></div></div>
+      <div class="cstep"><div class="csn">4</div><div>Pega el JSON abajo y haz clic en Conectar.</div></div>
+    </div>
+    <div class="fg">
+      <label>firebaseConfig JSON</label>
+      <textarea class="fc" id="fb-input" rows="6" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+      <button class="btn btn-p" onclick="connectFirebase()"><i class="fas fa-fire"></i> Conectar Firebase</button>
+      <button class="btn btn-s" onclick="goLocal()"><i class="fas fa-laptop"></i> Solo local (este dispositivo)</button>
+    </div>
+    <p style="font-size:.73rem;color:var(--muted);margin-top:10px">Modo local: datos guardados en este navegador. No se sincronizan entre dispositivos.</p>
+  </div>
+</div>
+
+<!-- HAMBURGER -->
+<button id="ham" onclick="toggleSB()"><span></span><span></span><span></span></button>
+<div id="sbov" onclick="toggleSB()"></div>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="sb-logo">
+    <div class="sb-brand">HD Crédit</div>
+    <div class="sb-sub">Control de Pagos v2.1</div>
+  </div>
+  <div class="sb-nav">
+    <div class="sb-sec">Principal</div>
+    <div class="ni on" onclick="gv('dashboard')"><i class="fas fa-chart-pie"></i> Dashboard</div>
+    <div class="ni" onclick="gv('checklist')"><i class="fas fa-check-square"></i> Checklist Pagos <span class="nb" id="nb-late" style="display:none">0</span></div>
+    <div class="sb-sec">Gestión</div>
+    <div class="ni" onclick="gv('clientes')"><i class="fas fa-users"></i> Acreditados</div>
+    <div class="ni" onclick="gv('historial')"><i class="fas fa-history"></i> Historial</div>
+    <div class="sb-sec">Herramientas</div>
+    <div class="ni" onclick="gv('tabla')"><i class="fas fa-table"></i> Tabla de Factores</div>
+    <div class="ni" onclick="gv('reportes')"><i class="fas fa-chart-bar"></i> Reportes</div>
+    <div class="ni" onclick="doExport()"><i class="fas fa-file-csv"></i> Exportar CSV</div>
+    <div class="sb-sec">Config</div>
+    <div class="ni" onclick="document.getElementById('fb-cfg').style.display='flex'"><i class="fas fa-fire"></i> Firebase</div>
+  </div>
+  <div class="sb-foot">
+    <div class="av">H</div>
+    <div>
+      <div class="ui-name">HD Crédit</div>
+      <div class="ui-role" id="sync-lbl">● Local</div>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="main">
+
+<!-- ═══════════ DASHBOARD ═══════════ -->
+<div id="v-dashboard" class="view on">
+  <div class="ph">
+    <div>
+      <div class="pt">Dashboard</div>
+      <div class="ps" id="dash-date"></div>
+    </div>
+    <div class="ha">
+      <button class="btn btn-p" onclick="openNew()"><i class="fas fa-plus"></i> Nuevo Acreditado</button>
+    </div>
+  </div>
+  <div class="ca">
+    <div class="sg">
+      <div class="sc"><div class="si"><i class="fas fa-users"></i></div><div class="sv" id="s-total">0</div><div class="sl">Acreditados</div></div>
+      <div class="sc w"><div class="si"><i class="fas fa-money-bill-wave"></i></div><div class="sv" id="s-capital">$0</div><div class="sl">Capital Prestado</div></div>
+      <div class="sc d"><div class="si"><i class="fas fa-exclamation-triangle"></i></div><div class="sv" id="s-morosos">0</div><div class="sl">Morosos</div></div>
+      <div class="sc i"><div class="si"><i class="fas fa-coins"></i></div><div class="sv" id="s-saldo">$0</div><div class="sl">Saldo Pendiente</div></div>
+      <div class="sc p"><div class="si"><i class="fas fa-calendar-check"></i></div><div class="sv" id="s-qcobro">$0</div><div class="sl">Cobro Esta Quincena</div></div>
+      <div class="sc"><div class="si"><i class="fas fa-check-circle"></i></div><div class="sv" id="s-cobrado">$0</div><div class="sl">Cobrado Quincena Actual</div></div>
+    </div>
+    <div class="dg">
+      <div class="dc">
+        <div class="dct"><i class="fas fa-exclamation-circle"></i> Morosos</div>
+        <div id="d-morosos"><p style="color:var(--muted);font-size:.84rem;text-align:center;padding:18px">✅ Sin morosos</p></div>
+      </div>
+      <div class="dc">
+        <div class="dct"><i class="fas fa-clock"></i> Próximos a Vencer</div>
+        <div id="d-prox"><p style="color:var(--muted);font-size:.84rem;text-align:center;padding:18px">Sin préstamos próximos</p></div>
+      </div>
+      <div class="dc" style="grid-column:1/-1">
+        <div class="dct"><i class="fas fa-chart-bar"></i> Cobros por Quincena (últimas 6)</div>
+        <div class="mc" id="d-chart"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ CHECKLIST ═══════════ -->
+<div id="v-checklist" class="view">
+  <div class="ph">
+    <div><div class="pt">Checklist de Pagos</div><div class="ps">Marca con un solo clic</div></div>
+    <div class="ha">
+      <button class="btn btn-wa" onclick="waAll()"><i class="fab fa-whatsapp"></i> Recordatorio Masivo</button>
+      <button class="btn btn-p" onclick="openNew()"><i class="fas fa-plus"></i> Agregar</button>
+    </div>
+  </div>
+  <div class="ca">
+    <div class="tw">
+      <div class="ch-hd">
+        <div class="qsel"><i class="fas fa-calendar" style="color:var(--accent)"></i><select id="qsel" onchange="renderCL()"></select></div>
+        <span id="cl-prog" style="font-size:.82rem;color:var(--muted);margin-left:auto"></span>
+      </div>
+      <div style="padding:11px 18px;border-bottom:1px solid var(--border);background:var(--surface)">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:.76rem;color:var(--muted)">
+          <span>Progreso de cobro</span><span id="cl-pct">0%</span>
+        </div>
+        <div class="pb" style="height:7px"><div class="pf" id="cl-bar" style="width:0%"></div></div>
+      </div>
+      <div id="cl-items"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ ACREDITADOS ═══════════ -->
+<div id="v-clientes" class="view">
+  <div class="ph">
+    <div><div class="pt">Acreditados</div><div class="ps">Gestión de préstamos</div></div>
+    <div class="ha"><button class="btn btn-p" onclick="openNew()"><i class="fas fa-plus"></i> Nuevo</button></div>
+  </div>
+  <div class="ca">
+    <div class="tw">
+      <div class="tt">
+        <div class="sb"><i class="fas fa-search"></i><input type="text" placeholder="Buscar..." id="srch-c" oninput="filterC()"></div>
+        <select class="fsel" id="flt-est" onchange="filterC()">
+          <option value="">Todos</option>
+          <option value="al_corriente">Al corriente</option>
+          <option value="atrasado">Atrasados</option>
+          <option value="liquidado">Liquidados</option>
+        </select>
+        <select class="fsel" id="flt-plazo" onchange="filterC()">
+          <option value="">Plazos</option>
+          <option value="6">6Q</option><option value="8">8Q</option>
+          <option value="10">10Q</option><option value="12">12Q</option>
+        </select>
+      </div>
+      <div class="ts"><table><thead><tr>
+        <th>#</th><th>Nombre</th><th>Monto</th><th>Pago Q</th>
+        <th>Plazo</th><th>Q Pagadas</th><th>Progreso</th>
+        <th>Saldo</th><th>Estado</th><th>Vence</th><th>Acciones</th>
+      </tr></thead><tbody id="tb-c"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ HISTORIAL ═══════════ -->
+<div id="v-historial" class="view">
+  <div class="ph"><div><div class="pt">Historial de Pagos</div><div class="ps">Registro completo</div></div></div>
+  <div class="ca">
+    <div class="tw">
+      <div class="tt"><div class="sb"><i class="fas fa-search"></i><input type="text" placeholder="Buscar..." id="srch-h" oninput="filterH()"></div></div>
+      <div class="ts"><table><thead><tr>
+        <th>Acreditado</th><th>Monto</th><th>Quincena</th><th>Fecha</th><th>Hora</th><th>Tipo</th>
+      </tr></thead><tbody id="tb-h"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ TABLA FACTORES ═══════════ -->
+<div id="v-tabla" class="view">
+  <div class="ph"><div><div class="pt">Tabla de Factores</div><div class="ps">Pagos quincenales de referencia</div></div></div>
+  <div class="ca">
+    <div class="tw">
+      <div class="ts"><table><thead><tr>
+        <th>Monto</th><th>6 Quincenas</th><th>8 Quincenas</th><th>10 Quincenas</th><th>12 Quincenas</th><th>Interés (6Q)</th>
+      </tr></thead><tbody id="tb-f"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ REPORTES ═══════════ -->
+<div id="v-reportes" class="view">
+  <div class="ph">
+    <div><div class="pt">Reportes</div><div class="ps">Análisis y rentabilidad</div></div>
+    <div class="ha">
+      <button class="btn btn-s" onclick="window.print()"><i class="fas fa-print"></i> Imprimir</button>
+    </div>
+  </div>
+  <div class="ca">
+    <div class="sg" id="rep-stats"></div>
+    <div class="tw">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border)"><strong style="font-family:'Syne',sans-serif">Resumen por Acreditado</strong></div>
+      <div class="ts"><table><thead><tr>
+        <th>Nombre</th><th>Capital</th><th>Q Pagadas</th><th>Saldo</th><th>Estado</th>
+      </tr></thead><tbody id="tb-rep"></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<!-- ═══════════ MODALS ═══════════ -->
+
+<!-- Nuevo / Editar -->
+<div class="overlay" id="m-cliente">
+  <div class="modal">
+    <div class="modal-hd"><div class="modal-title" id="m-title">Nuevo Acreditado</div><button class="btn-x" onclick="cm('m-cliente')"><i class="fas fa-times"></i></button></div>
+    <input type="hidden" id="eid">
+    <div class="fgrid">
+      <div class="fg full"><label>Nombre Completo *</label><input class="fc" id="f-nom" placeholder="Nombre del acreditado"></div>
+      <div class="fg"><label>Monto *</label>
+        <select class="fc" id="f-monto" onchange="calcPQ()">
+          <option value="">Seleccionar...</option>
+          <option>1000</option><option>2000</option><option>3000</option><option>4000</option>
+          <option>5000</option><option>6000</option><option>7000</option><option>8000</option>
+          <option>9000</option><option>10000</option><option>11000</option><option>12000</option>
+          <option>13000</option><option>14000</option><option>15000</option>
+        </select>
+      </div>
+      <div class="fg"><label>Plazo *</label>
+        <select class="fc" id="f-plazo" onchange="calcPQ()">
+          <option value="">Seleccionar...</option>
+          <option value="6">6 Quincenas</option><option value="8">8 Quincenas</option>
+          <option value="10">10 Quincenas</option><option value="12">12 Quincenas</option>
+        </select>
+      </div>
+      <div class="fg"><label>Pago Quincenal</label><input class="fc" id="f-pq" readonly placeholder="Auto" style="color:var(--accent)"></div>
+      <div class="fg"><label>Fecha Inicio</label><input class="fc" type="date" id="f-ini"></div>
+      <div class="fg"><label>Q ya Pagadas</label><input class="fc" type="number" id="f-pag" value="0" min="0"></div>
+      <div class="fg full"><label>WhatsApp (10 dígitos)</label><input class="fc" id="f-tel" placeholder="5512345678"></div>
+      <div class="fg full"><label>Notas</label><textarea class="fc" id="f-notas" rows="2" placeholder="Observaciones..."></textarea></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;flex-wrap:wrap">
+      <button class="btn btn-s" onclick="cm('m-cliente')">Cancelar</button>
+      <button class="btn btn-p" onclick="saveC()"><i class="fas fa-save"></i> Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmar Eliminar -->
+<div class="overlay" id="m-confirm">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-hd"><div class="modal-title">Confirmar eliminación</div><button class="btn-x" onclick="cm('m-confirm')"><i class="fas fa-times"></i></button></div>
+    <p style="color:var(--muted);font-size:.87rem;margin-bottom:20px" id="conf-msg">¿Eliminar este acreditado?</p>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-s" onclick="cm('m-confirm')">Cancelar</button>
+      <button class="btn btn-d" id="conf-ok"><i class="fas fa-trash"></i> Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Estado de Cuenta -->
+<div class="overlay" id="m-ec">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-hd">
+      <div class="modal-title">Estado de Cuenta</div>
+      <button class="btn-x" onclick="cm('m-ec')"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="ec-body"></div>
+    <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
+      <button class="btn btn-wa" id="ec-wa-btn"><i class="fab fa-whatsapp"></i> Enviar por WhatsApp</button>
+      <button class="btn btn-s" onclick="cm('m-ec')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   TABLA DE FACTORES
+============================================================ */
+const TF = {
+  1000:{6:240,8:194,10:167,12:null},
+  2000:{6:467,8:364,10:307,12:null},
+  3000:{6:650,8:545,10:456,12:400},
+  4000:{6:850,8:722,10:601,12:534},
+  5000:{6:1083,8:900,10:751,12:667},
+  6000:{6:1300,8:1077,10:900,12:800},
+  7000:{6:1514,8:1264,10:1050,12:934},
+  8000:{6:1734,8:1431,10:1200,12:1067},
+  9000:{6:1954,8:1598,10:1350,12:1200},
+  10000:{6:2176,8:1764,10:1501,12:1334},
+  11000:{6:2384,8:1931,10:1651,12:1467},
+  12000:{6:2600,8:2097,10:1800,12:1600},
+  13000:{6:2817,8:2264,10:1950,12:1734},
+  14000:{6:3034,8:2431,10:2100,12:1867},
+  15000:{6:3251,8:2601,10:2251,12:2001}
+};
+
+/* ============================================================
+   STATE
+============================================================ */
+let DB = null, USE_FB = false;
+let clientes = [], historial = [];
+
+/* ============================================================
+   FIREBASE (lazy load)
+============================================================ */
+function connectFirebase() {
+  const raw = document.getElementById('fb-input').value.trim();
+  let cfg;
+  try {
+    const match = raw.match(/\{[\s\S]*\}/);
+    cfg = JSON.parse(match ? match[0] : raw);
+  } catch(e) { toast('JSON inválido', 'err'); return; }
+  localStorage.setItem('hd_fb', JSON.stringify(cfg));
+  loadFirebaseSDK(cfg);
+}
+
+function loadFirebaseSDK(cfg) {
+  // Load Firebase scripts dynamically
+  const s1 = document.createElement('script');
+  s1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+  s1.onload = () => {
+    const s2 = document.createElement('script');
+    s2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
+    s2.onload = () => initFB(cfg);
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s1);
+}
+
+function initFB(cfg) {
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(cfg);
+    DB = firebase.firestore();
+    USE_FB = true;
+    document.getElementById('sync-lbl').textContent = '🟢 Firebase';
+    document.getElementById('sync-lbl').style.color = 'var(--accent)';
+    document.getElementById('fb-cfg').style.display = 'none';
+    toast('Firebase conectado ✅', 'ok');
+    startFBSync();
+  } catch(e) {
+    console.error(e);
+    toast('Error Firebase: ' + e.message, 'err');
+    goLocal();
+  }
+}
+
+function startFBSync() {
+  DB.collection('clientes').orderBy('createdAt').onSnapshot(snap => {
+    clientes = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    localStorage.setItem('hd_c', JSON.stringify(clientes));
+    refresh();
+  });
+  DB.collection('historial').orderBy('ts', 'desc').limit(500).onSnapshot(snap => {
+    historial = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    localStorage.setItem('hd_h', JSON.stringify(historial));
+    renderH();
+  });
+}
+
+function goLocal() {
+  localStorage.setItem('hd_fb', 'local');
+  document.getElementById('fb-cfg').style.display = 'none';
+  loadLocal();
+}
+
+/* ============================================================
+   LOCAL STORAGE
+============================================================ */
+function loadLocal() {
+  clientes = JSON.parse(localStorage.getItem('hd_c') || '[]');
+  historial = JSON.parse(localStorage.getItem('hd_h') || '[]');
+  if (!clientes.length) seedData();
+  refresh();
+}
+
+function saveLocal() {
+  localStorage.setItem('hd_c', JSON.stringify(clientes));
+  localStorage.setItem('hd_h', JSON.stringify(historial));
+}
+
+/* ============================================================
+   SEED DATA (from your Excel file)
+============================================================ */
+function xlDate(n) {
+  if (!n) return '';
+  const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+  return d.toISOString().split('T')[0];
+}
+
+function seedData() {
+  const raw = [
+    {n:'IVON',m:8000,pq:1067,nq:12,ini:45976,pg:12,s:0,a:''},
+    {n:'E.NANCY',m:5000,pq:667,nq:12,ini:45976,pg:12,s:0,a:''},
+    {n:'YISEL',m:8000,pq:1200,nq:10,ini:46021,pg:10,s:0,a:''},
+    {n:'TREJO',m:6000,pq:800,nq:12,ini:46006,pg:12,s:0,a:''},
+    {n:'GABI',m:4000,pq:604,nq:10,ini:45991,pg:10,s:0,a:''},
+    {n:'H/TERE',m:5000,pq:751,nq:10,ini:46006,pg:10,s:0,a:''},
+    {n:'JOSE LUIS',m:5000,pq:900,nq:8,ini:46127,pg:2,s:5400,a:'ATRASADO'},
+    {n:'ANDREA',m:4000,pq:601,nq:10,ini:46037,pg:10,s:0,a:''},
+    {n:'SAHIRA',m:5000,pq:667,nq:12,ini:46037,pg:8,s:2668,a:'ATRASADO'},
+    {n:'SAM',m:8000,pq:1067,nq:12,ini:46037,pg:8,s:4268,a:'ATRASADO'},
+    {n:'JASIEL',m:10000,pq:1501,nq:10,ini:46052,pg:8,s:3002,a:''},
+    {n:'PERLA 12Q',m:12000,pq:1600,nq:12,ini:46052,pg:10,s:3200,a:''},
+    {n:'JESUS 71',m:5000,pq:751,nq:10,ini:46052,pg:7,s:2253,a:''},
+    {n:'LORENA',m:15000,pq:2001,nq:12,ini:46052,pg:7,s:10005,a:''},
+    {n:'ERIKA',m:15000,pq:2001,nq:12,ini:46068,pg:6,s:12006,a:'ATRASADO'},
+    {n:'VERONICA',m:5000,pq:751,nq:10,ini:46068,pg:7,s:2253,a:''},
+    {n:'ESTELA',m:5000,pq:667,nq:12,ini:46068,pg:6,s:4002,a:'ATRASADO'},
+    {n:'MARI TERE',m:3000,pq:650,nq:6,ini:46068,pg:5,s:650,a:'ATRASADO'},
+    {n:'DIOSDADO',m:10000,pq:1334,nq:12,ini:46068,pg:6,s:8004,a:'ATRASADO'},
+    {n:'JULIA',m:5000,pq:667,nq:12,ini:46081,pg:5,s:4669,a:'ATRASADO'},
+    {n:'VIVIANA',m:5000,pq:667,nq:12,ini:46081,pg:5,s:4669,a:'ATRASADO'},
+    {n:'PAULINA',m:5000,pq:751,nq:10,ini:46081,pg:4,s:4506,a:'ATRASADO'},
+    {n:'OLGA',m:2000,pq:467,nq:6,ini:46081,pg:5,s:467,a:'ATRASADO'},
+    {n:'JOSE LUIS 2',m:5000,pq:900,nq:8,ini:46096,pg:4,s:3600,a:'ATRASADO'},
+    {n:'GISEL',m:5000,pq:1083,nq:6,ini:46111,pg:3,s:3249,a:'ATRASADO'},
+    {n:'VANE',m:7000,pq:1050,nq:10,ini:46111,pg:3,s:7350,a:'ATRASADO'},
+    {n:'PERLA 7K',m:7000,pq:934,nq:12,ini:46111,pg:4,s:7472,a:''},
+    {n:'ROXANA',m:6000,pq:800,nq:12,ini:46127,pg:2,s:8000,a:'ATRASADO'},
+    {n:'E.NANCY 2',m:4000,pq:722,nq:8,ini:46127,pg:2,s:4332,a:'ATRASADO'},
+    {n:'JAZ',m:4000,pq:534,nq:12,ini:46127,pg:2,s:5340,a:'ATRASADO'},
+    {n:'YISEL 2',m:8000,pq:1200,nq:10,ini:46142,pg:1,s:10800,a:'ATRASADO'},
+    {n:'TERE',m:7000,pq:1264,nq:8,ini:46142,pg:1,s:8848,a:'ATRASADO'},
+    {n:'ABRIL',m:5000,pq:900,nq:8,ini:46142,pg:1,s:6300,a:'ATRASADO'},
+    {n:'JOSE LUIS 3',m:4000,pq:722,nq:8,ini:46143,pg:1,s:5054,a:'ATRASADO'},
+    {n:'ANGEL C.',m:15000,pq:2601,nq:8,ini:46143,pg:1,s:18207,a:'ATRASADO'},
+    {n:'MARI TERE 2',m:5000,pq:1083,nq:6,ini:46157,pg:0,s:6498,a:'ATRASADO'},
+    {n:'DANIEL',m:6000,pq:800,nq:12,ini:46157,pg:0,s:9600,a:'ATRASADO'},
+    {n:'LUISA',m:6000,pq:1300,nq:6,ini:46157,pg:0,s:7800,a:'ATRASADO'},
+    {n:'TREJO 2',m:8000,pq:1067,nq:12,ini:46172,pg:0,s:12804,a:''},
+    {n:'MAMA DE SAM',m:8000,pq:1067,nq:12,ini:46172,pg:0,s:12804,a:''},
+    {n:'ANDREA 2',m:6000,pq:800,nq:12,ini:46172,pg:0,s:9600,a:''},
+    {n:'NAYE',m:6000,pq:800,nq:12,ini:46172,pg:0,s:9600,a:''},
+    {n:'JESY',m:4000,pq:722,nq:8,ini:0,pg:0,s:5776,a:''},
+    {n:'H/TERE 2',m:6000,pq:900,nq:10,ini:46172,pg:0,s:9000,a:''},
+  ];
+  clientes = raw.map((r, i) => ({
+    id: 'c_' + i + '_' + Date.now(),
+    nombre: r.n, monto: r.m, pq: r.pq, nq: r.nq,
+    inicio: xlDate(r.ini), pagadas: r.pg, saldo: r.s,
+    alerta: r.a, telefono: '', notas: '',
+    pagos: Array(12).fill(false).map((_,j) => j < r.pg),
+    createdAt: new Date().toISOString()
+  }));
+  saveLocal();
+}
+
+/* ============================================================
+   QUINCENA UTILS
+============================================================ */
+function getQuincenas(n) {
+  const qs = [];
+  const now = new Date();
+  let y = now.getFullYear(), mo = now.getMonth();
+  let d = now.getDate() <= 15 ? 15 : new Date(y, mo+1, 0).getDate();
+  for (let i = 0; i < n; i++) {
+    qs.unshift({ label: fmtQ(y, mo, d), key: `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}` });
+    if (d === 15) { d = new Date(y, mo, 0).getDate(); mo--; if (mo<0){mo=11;y--;} }
+    else d = 15;
+  }
+  return qs;
+}
+function fmtQ(y, m, d) {
+  const M = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return `${d===15?'1ª':'2ª'} Q · ${M[m]} ${y}`;
+}
+function curQKey() {
+  const n = new Date(), y = n.getFullYear(), mo = n.getMonth();
+  const d = n.getDate()<=15?15:new Date(y,mo+1,0).getDate();
+  return `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+/* ============================================================
+   CRUD
+============================================================ */
+function openNew() {
+  document.getElementById('eid').value = '';
+  document.getElementById('m-title').textContent = 'Nuevo Acreditado';
+  ['f-nom','f-tel','f-notas'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-monto').value = '';
+  document.getElementById('f-plazo').value = '';
+  document.getElementById('f-pq').value = '';
+  document.getElementById('f-ini').value = new Date().toISOString().split('T')[0];
+  document.getElementById('f-pag').value = '0';
+  om('m-cliente');
+}
+
+function editC(id) {
+  const c = clientes.find(x=>x.id===id); if(!c) return;
+  document.getElementById('eid').value = id;
+  document.getElementById('m-title').textContent = 'Editar Acreditado';
+  document.getElementById('f-nom').value = c.nombre;
+  document.getElementById('f-monto').value = c.monto;
+  document.getElementById('f-plazo').value = c.nq;
+  document.getElementById('f-pq').value = '$' + (c.pq||0).toLocaleString('es-MX');
+  document.getElementById('f-ini').value = c.inicio||'';
+  document.getElementById('f-pag').value = c.pagadas||0;
+  document.getElementById('f-tel').value = c.telefono||'';
+  document.getElementById('f-notas').value = c.notas||'';
+  om('m-cliente');
+}
+
+function calcPQ() {
+  const m = parseInt(document.getElementById('f-monto').value)||0;
+  const p = parseInt(document.getElementById('f-plazo').value)||0;
+  const pq = document.getElementById('f-pq');
+  if (m && p) {
+    if (!TF[m]) { pq.value = 'Monto no válido'; return; }
+    if (!TF[m][p]) { pq.value = 'No aplica'; return; }
+    pq.value = '$' + TF[m][p].toLocaleString('es-MX');
+  } else pq.value = '';
+}
+
+async function saveC() {
+  const nombre = document.getElementById('f-nom').value.trim();
+  const monto = parseInt(document.getElementById('f-monto').value)||0;
+  const nq = parseInt(document.getElementById('f-plazo').value)||0;
+  const inicio = document.getElementById('f-ini').value;
+  const pagadas = parseInt(document.getElementById('f-pag').value)||0;
+  const telefono = document.getElementById('f-tel').value.replace(/\D/g,'').slice(0,10);
+  const notas = document.getElementById('f-notas').value.trim();
+  const eid = document.getElementById('eid').value;
+
+  if (!nombre || !monto || !nq) { toast('Completa los campos requeridos', 'wrn'); return; }
+  if (!TF[monto] || !TF[monto][nq]) { toast('Combinación monto/plazo no válida', 'err'); return; }
+
+  const pq = TF[monto][nq];
+  const saldo = Math.max(0, (nq - pagadas) * pq);
+  const pagos = Array(12).fill(false).map((_,i) => i < pagadas);
+  const data = { nombre, monto, pq, nq, inicio, pagadas, saldo, pagos, telefono, notas,
+    alerta: saldo === 0 ? '' : (pagadas < nq ? 'ATRASADO' : ''), updatedAt: new Date().toISOString() };
+
+  if (eid) {
+    if (USE_FB) { await DB.collection('clientes').doc(eid).set(data, {merge:true}); }
+    else { const i = clientes.findIndex(x=>x.id===eid); if(i>=0) clientes[i]={...clientes[i],...data}; saveLocal(); refresh(); }
+    toast(`${nombre} actualizado`, 'ok');
+  } else {
+    const id = 'c_' + Date.now();
+    data.id = id; data.createdAt = new Date().toISOString();
+    if (USE_FB) { await DB.collection('clientes').doc(id).set(data); }
+    else { clientes.push(data); saveLocal(); refresh(); }
+    toast(`${nombre} agregado ✅`, 'ok');
+  }
+  cm('m-cliente');
+}
+
+function confirmDel(id) {
+  const c = clientes.find(x=>x.id===id); if(!c) return;
+  document.getElementById('conf-msg').textContent = `¿Eliminar a ${c.nombre}? Esta acción no se puede deshacer.`;
+  document.getElementById('conf-ok').onclick = () => delC(id);
+  om('m-confirm');
+}
+
+async function delC(id) {
+  if (USE_FB) { await DB.collection('clientes').doc(id).delete(); }
+  else { clientes = clientes.filter(x=>x.id!==id); saveLocal(); refresh(); }
+  cm('m-confirm');
+  toast('Acreditado eliminado', 'wrn');
+}
+
+/* ============================================================
+   TOGGLE PAGO
+============================================================ */
+async function togglePago(cid, qIdx) {
+  const c = clientes.find(x=>x.id===cid); if(!c) return;
+  const pagos = [...(c.pagos||Array(12).fill(false))];
+  pagos[qIdx] = !pagos[qIdx];
+  const pagadas = pagos.filter(Boolean).length;
+  const saldo = Math.max(0, (c.nq - pagadas) * c.pq);
+  const now = new Date();
+  const qKey = document.getElementById('qsel').value;
+
+  const log = {
+    id: 'h_' + Date.now(), clienteId: cid, nombre: c.nombre,
+    monto: c.pq, qIndex: qIdx, qKey,
+    accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
+    fecha: now.toLocaleDateString('es-MX'),
+    hora: now.toLocaleTimeString('es-MX'),
+    ts: now.toISOString()
+  };
+
+  if (USE_FB) {
+    await DB.collection('clientes').doc(cid).set({pagos, pagadas, saldo}, {merge:true});
+    await DB.collection('historial').doc(log.id).set(log);
+  } else {
+    const i = clientes.findIndex(x=>x.id===cid);
+    clientes[i] = {...clientes[i], pagos, pagadas, saldo};
+    historial.unshift(log);
+    saveLocal();
+  }
+  toast(pagos[qIdx] ? `✅ Pago — ${c.nombre} $${c.pq.toLocaleString('es-MX')}` : `↩️ Revertido — ${c.nombre}`, pagos[qIdx]?'ok':'wrn');
+  renderCL();
+  renderDash();
+}
+
+/* ============================================================
+   ESTADO DE CUENTA
+============================================================ */
+function openEC(id) {
+  const c = clientes.find(x=>x.id===id); if(!c) return;
+
+  const faltantes = c.nq - c.pagadas;
+  const saldo = faltantes * c.pq;
+
+  // Timeline de quincenas
+  const timeline = Array(c.nq).fill(0).map((_,i) => {
+    if (i < c.pagadas) return `<div class="ec-q ck" title="Quincena ${i+1} pagada">${i+1}</div>`;
+    if (i === c.pagadas) return `<div class="ec-q nx" title="Próxima quincena">${i+1}</div>`;
+    return `<div class="ec-q pd" title="Quincena ${i+1} pendiente">${i+1}</div>`;
+  }).join('');
+
+  const estado = c.saldo===0 ? '✅ Liquidado'
+    : c.alerta==='ATRASADO' ? '⚠️ Con atraso'
+    : '🟢 Al corriente';
+
+  document.getElementById('ec-body').innerHTML = `
+    <div class="ec-card">
+      <div class="ec-title">Información del préstamo</div>
+      <div class="ec-row"><span class="ec-lbl">Acreditado</span><span class="ec-val">${c.nombre}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Monto prestado</span><span class="ec-val" style="color:var(--accent)">$${c.monto.toLocaleString('es-MX')}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Plazo total</span><span class="ec-val">${c.nq} quincenas</span></div>
+      <div class="ec-row"><span class="ec-lbl">Pago quincenal</span><span class="ec-val">$${c.pq.toLocaleString('es-MX')}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Estado</span><span class="ec-val">${estado}</span></div>
+    </div>
+    <div class="ec-card">
+      <div class="ec-title">Avance de pagos</div>
+      <div class="ec-row"><span class="ec-lbl">Quincenas pagadas</span><span class="ec-val" style="color:var(--accent)">${c.pagadas} de ${c.nq}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Quincenas restantes</span><span class="ec-val" style="color:${faltantes>0?'var(--warn)':'var(--accent)'}">${faltantes}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Saldo pendiente</span><span class="ec-val" style="color:${saldo>0?'var(--warn)':'var(--accent)'}">$${saldo.toLocaleString('es-MX')}</span></div>
+      <div style="margin-top:12px">
+        <div class="ec-title" style="margin-bottom:8px">Progreso visual</div>
+        <div class="ec-timeline">${timeline}</div>
+        <div style="display:flex;gap:12px;margin-top:10px;font-size:.72rem;color:var(--muted)">
+          <span>🟢 Pagada</span><span style="color:var(--warn)">🟡 Próxima</span><span>⬜ Pendiente</span>
+        </div>
+      </div>
+    </div>`;
+
+  // WhatsApp button
+  const waBtn = document.getElementById('ec-wa-btn');
+  if (c.telefono) {
+    waBtn.style.display = 'flex';
+    waBtn.onclick = () => sendEC(c);
+  } else {
+    waBtn.style.display = 'none';
+  }
+
+  om('m-ec');
+}
+
+function sendEC(c) {
+  const faltantes = c.nq - c.pagadas;
+  const saldo = faltantes * c.pq;
+  const estado = c.saldo===0 ? 'LIQUIDADO ✅'
+    : c.alerta==='ATRASADO' ? 'CON ATRASO ⚠️'
+    : 'AL CORRIENTE ✅';
+
+  const msg =
+`━━━━━━━━━━━━━━━━━━━━
+💳 *ESTADO DE CUENTA*
+*HD Crédit*
+━━━━━━━━━━━━━━━━━━━━
+👤 *${c.nombre}*
+
+📋 *DETALLES DEL PRÉSTAMO*
+• Monto prestado: *$${c.monto.toLocaleString('es-MX')}*
+• Plazo: *${c.nq} quincenas*
+• Pago quincenal: *$${c.pq.toLocaleString('es-MX')}*
+
+📊 *AVANCE DE PAGOS*
+• Quincenas pagadas: *${c.pagadas} de ${c.nq}*
+• Quincenas restantes: *${faltantes}*
+• Saldo pendiente: *$${saldo.toLocaleString('es-MX')}*
+
+📌 Estado: *${estado}*
+━━━━━━━━━━━━━━━━━━━━
+_Cualquier duda, con gusto te atendemos._
+_¡Gracias por tu confianza! 🙏_`;
+
+  window.open(`https://wa.me/52${c.telefono}?text=${encodeURIComponent(msg)}`, '_blank');
+  toast(`Estado de cuenta enviado a ${c.nombre}`, 'wa');
+}
+
+/* ============================================================
+   WHATSAPP RECORDATORIO
+============================================================ */
+function waCliente(id) {
+  const c = clientes.find(x=>x.id===id); if(!c) return;
+  if (!c.telefono) { toast('Sin teléfono registrado', 'wrn'); return; }
+  const faltantes = c.nq - c.pagadas;
+  const msg = `Hola ${c.nombre} 👋\n\nTe recordamos que tu pago quincenal de *$${c.pq.toLocaleString('es-MX')}* está próximo.\n\n📊 Quincenas: ${c.pagadas}/${c.nq} · Faltan: ${faltantes}\n💰 Saldo: $${c.saldo.toLocaleString('es-MX')}\n\n¡Gracias! — HD Crédit 🙏`;
+  window.open(`https://wa.me/52${c.telefono}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+function waAll() {
+  const activos = clientes.filter(c => c.saldo > 0 && c.telefono);
+  if (!activos.length) { toast('Sin acreditados con teléfono', 'wrn'); return; }
+  activos.forEach((c, i) => setTimeout(() => waCliente(c.id), i*900));
+  toast(`Enviando a ${activos.length} acreditados`, 'ok');
+}
+
+/* ============================================================
+   RENDER DASHBOARD
+============================================================ */
+function renderDash() {
+  const morosos = clientes.filter(c=>c.alerta==='ATRASADO');
+  const activos = clientes.filter(c=>c.saldo>0);
+  const capital = clientes.reduce((a,c)=>a+c.monto,0);
+  const saldoTotal = clientes.reduce((a,c)=>a+c.saldo,0);
+  const qCobro = activos.reduce((a,c)=>a+c.pq,0);
+  const qKey = curQKey();
+  const cobrado = historial
+    .filter(h=>h.qKey===qKey&&h.accion==='PAGO')
+    .reduce((a,h)=>a+(h.monto||0),0);
+
+  set('s-total', clientes.length);
+  set('s-capital', '$'+capital.toLocaleString('es-MX'));
+  set('s-morosos', morosos.length);
+  set('s-saldo', '$'+saldoTotal.toLocaleString('es-MX'));
+  set('s-qcobro', '$'+qCobro.toLocaleString('es-MX'));
+  set('s-cobrado', '$'+cobrado.toLocaleString('es-MX'));
+  set('dash-date', new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'}));
+
+  // Badge
+  const nb = document.getElementById('nb-late');
+  morosos.length > 0 ? (nb.textContent=morosos.length, nb.style.display='') : nb.style.display='none';
+
+  // Morosos
+  const ml = document.getElementById('d-morosos');
+  ml.innerHTML = morosos.length ? morosos.slice(0,6).map(c=>`
+    <div class="mi">
+      <div class="mav">${c.nombre[0]}</div>
+      <div><div class="mn">${c.nombre}</div><div class="md">$${c.saldo.toLocaleString('es-MX')} · ${c.nq-c.pagadas}Q rest.</div></div>
+      ${c.telefono?`<button class="btn btn-wa btn-sm btn-ic" onclick="waCliente('${c.id}')" style="margin-left:auto"><i class="fab fa-whatsapp"></i></button>`:''}
+    </div>`).join('')
+    : '<p style="color:var(--muted);font-size:.84rem;text-align:center;padding:18px">✅ Sin morosos</p>';
+
+  // Próximos
+  const prox = clientes.filter(c=>c.saldo>0&&(c.nq-c.pagadas)<=2).sort((a,b)=>a.pagadas-b.pagadas);
+  const pl = document.getElementById('d-prox');
+  pl.innerHTML = prox.length ? prox.slice(0,5).map(c=>`
+    <div class="mi">
+      <div class="mav" style="background:rgba(255,184,0,.14);border-color:rgba(255,184,0,.3);color:var(--warn)">${c.nombre[0]}</div>
+      <div><div class="mn">${c.nombre}</div><div style="font-size:.73rem;color:var(--warn);font-family:'DM Mono',monospace">${c.nq-c.pagadas}Q restantes</div></div>
+      <span class="badge by" style="margin-left:auto">${c.nq-c.pagadas}Q</span>
+    </div>`).join('')
+    : '<p style="color:var(--muted);font-size:.84rem;text-align:center;padding:18px">Sin vencimientos próximos</p>';
+
+  // Mini chart
+  const qs = getQuincenas(6);
+  const vals = qs.map(q => historial.filter(h=>h.qKey===q.key&&h.accion==='PAGO').reduce((a,h)=>a+(h.monto||0),0));
+  const mx = Math.max(...vals, 1);
+  document.getElementById('d-chart').innerHTML = qs.map((q,i)=>`
+    <div class="bc">
+      <div class="bv" style="height:${Math.max(8,(vals[i]/mx)*130)}px" title="$${vals[i].toLocaleString('es-MX')}"></div>
+      <div class="bl">${q.label.split('·')[0].trim()}</div>
+    </div>`).join('');
+}
+
+/* ============================================================
+   RENDER CLIENTES
+============================================================ */
+function renderC(list) {
+  const data = list || clientes;
+  const tb = document.getElementById('tb-c');
+  if (!data.length) { tb.innerHTML='<tr><td colspan="11" style="text-align:center;padding:28px;color:var(--muted)">Sin acreditados</td></tr>'; return; }
+  tb.innerHTML = data.map((c,i)=>{
+    const pct = c.nq ? Math.round((c.pagadas/c.nq)*100) : 0;
+    const est = c.saldo===0?'liq':c.alerta==='ATRASADO'?'at':'ok';
+    const eb = est==='liq'?'<span class="badge bi">Liquidado</span>'
+      :est==='at'?'<span class="badge br">⚠ Atrasado</span>'
+      :'<span class="badge bg">✓ Al corriente</span>';
+    const fv = calcVenc(c.inicio, c.nq);
+    return `<tr>
+      <td><span style="font-family:'DM Mono',monospace;color:var(--muted)">${String(i+1).padStart(2,'0')}</span></td>
+      <td><strong>${c.nombre}</strong></td>
+      <td><span style="font-family:'DM Mono',monospace;color:var(--accent)">$${c.monto.toLocaleString('es-MX')}</span></td>
+      <td><span style="font-family:'DM Mono',monospace">$${c.pq.toLocaleString('es-MX')}</span></td>
+      <td><span class="badge bb">${c.nq}Q</span></td>
+      <td><span style="font-family:'DM Mono',monospace">${c.pagadas}/${c.nq}</span></td>
+      <td><div class="pb"><div class="pf ${pct<50?'d':pct<80?'w':''}" style="width:${pct}%"></div></div></td>
+      <td><span style="font-family:'DM Mono',monospace;color:${c.saldo>0?'var(--warn)':'var(--accent)'}">$${c.saldo.toLocaleString('es-MX')}</span></td>
+      <td>${eb}</td>
+      <td><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${fv}</span></td>
+      <td><div style="display:flex;gap:5px">
+        <button class="btn btn-s btn-sm btn-ic" onclick="openEC('${c.id}')" title="Estado de cuenta"><i class="fas fa-file-invoice"></i></button>
+        <button class="btn btn-s btn-sm btn-ic" onclick="editC('${c.id}')" title="Editar"><i class="fas fa-edit"></i></button>
+        ${c.telefono?`<button class="btn btn-wa btn-sm btn-ic" onclick="waCliente('${c.id}')" title="WhatsApp"><i class="fab fa-whatsapp"></i></button>`:''}
+        <button class="btn btn-d btn-sm btn-ic" onclick="confirmDel('${c.id}')" title="Eliminar"><i class="fas fa-trash"></i></button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function filterC() {
+  const q = document.getElementById('srch-c').value.toLowerCase();
+  const est = document.getElementById('flt-est').value;
+  const plazo = document.getElementById('flt-plazo').value;
+  renderC(clientes.filter(c=>{
+    const e = c.saldo===0?'liquidado':c.alerta==='ATRASADO'?'atrasado':'al_corriente';
+    return c.nombre.toLowerCase().includes(q)
+      && (!est||e===est)
+      && (!plazo||String(c.nq)===plazo);
+  }));
+}
+
+function calcVenc(inicio, nq) {
+  if (!inicio||!nq) return '—';
+  let d = new Date(inicio);
+  for (let i=0;i<nq;i++) {
+    if (d.getDate()===15) d = new Date(d.getFullYear(),d.getMonth(),new Date(d.getFullYear(),d.getMonth()+1,0).getDate());
+    else { d.setMonth(d.getMonth()+1); d.setDate(15); }
+  }
+  return d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'});
+}
+
+/* ============================================================
+   RENDER CHECKLIST
+============================================================ */
+function renderCL() {
+  const qKey = document.getElementById('qsel').value;
+  const activos = clientes.filter(c=>c.saldo>0||c.pagadas<c.nq);
+  let pagados = 0;
+  const html = activos.map((c,i)=>{
+    const isPaid = historial.some(h=>h.clienteId===c.id&&h.qKey===qKey&&h.accion==='PAGO');
+    if(isPaid) pagados++;
+    const isLate = c.alerta==='ATRASADO';
+    const cls = isPaid?'ck':isLate?'lt':'u';
+    const ico = isPaid?'fas fa-check':isLate?'fas fa-exclamation':'far fa-circle';
+    return `<div class="ci${isPaid?' paid':''}">
+      <div class="cn">${String(i+1).padStart(2,'0')}</div>
+      <div>
+        <div class="cname">${c.nombre}</div>
+        <div style="font-size:.7rem;color:var(--muted);margin-top:2px">${c.pagadas}/${c.nq}Q · ${c.nq-c.pagadas} restantes</div>
+      </div>
+      <div class="cdet">$${c.saldo.toLocaleString('es-MX')}<br><span style="font-size:.68rem;color:var(--muted)">saldo</span></div>
+      <div class="camt">$${c.pq.toLocaleString('es-MX')}</div>
+      <div style="display:flex;gap:5px;align-items:center">
+        <button class="pb2 ${cls}" onclick="togglePago('${c.id}',${c.pagadas})" title="${isPaid?'Revertir':'Registrar pago'}"><i class="${ico}"></i></button>
+        <button class="pb2 u" onclick="openEC('${c.id}')" title="Estado de cuenta" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-file-invoice" style="color:var(--info)"></i></button>
+        ${c.telefono?`<button class="pb2 u" onclick="waCliente('${c.id}')" title="WhatsApp" style="width:30px;height:30px;font-size:.72rem"><i class="fab fa-whatsapp" style="color:#25d366"></i></button>`:''}
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:32px;text-align:center;color:var(--muted)">Sin acreditados activos</div>';
+  document.getElementById('cl-items').innerHTML = html;
+  const total = activos.length;
+  const pct = total ? Math.round((pagados/total)*100) : 0;
+  document.getElementById('cl-prog').textContent = `${pagados} / ${total} cobrados`;
+  document.getElementById('cl-pct').textContent = pct + '%';
+  const bar = document.getElementById('cl-bar');
+  bar.style.width = pct + '%';
+  bar.className = 'pf ' + (pct<50?'d':pct<80?'w':'');
+}
+
+/* ============================================================
+   RENDER HISTORIAL
+============================================================ */
+function renderH(list) {
+  const data = (list||historial).slice(0,300);
+  const tb = document.getElementById('tb-h');
+  tb.innerHTML = data.length ? data.map(h=>`<tr>
+    <td><strong>${h.nombre||'—'}</strong></td>
+    <td><span style="font-family:'DM Mono',monospace;color:var(--accent)">$${(h.monto||0).toLocaleString('es-MX')}</span></td>
+    <td><span style="font-family:'DM Mono',monospace;font-size:.76rem">${h.qKey||'—'}</span></td>
+    <td>${h.fecha||'—'}</td>
+    <td style="font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)">${h.hora||'—'}</td>
+    <td><span class="badge ${h.accion==='PAGO'?'bg':'by'}">${h.accion||'—'}</span></td>
+  </tr>`).join('')
+    : '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Sin registros</td></tr>';
+}
+
+function filterH() {
+  const q = document.getElementById('srch-h').value.toLowerCase();
+  renderH(historial.filter(h=>(h.nombre||'').toLowerCase().includes(q)));
+}
+
+/* ============================================================
+   RENDER REPORTES
+============================================================ */
+function renderRep() {
+  const cap = clientes.reduce((a,c)=>a+c.monto,0);
+  const saldoT = clientes.reduce((a,c)=>a+c.saldo,0);
+  const morosos = clientes.filter(c=>c.alerta==='ATRASADO').length;
+  document.getElementById('rep-stats').innerHTML = `
+    <div class="sc"><div class="si"><i class="fas fa-users"></i></div><div class="sv">${clientes.length}</div><div class="sl">Total Acreditados</div></div>
+    <div class="sc w"><div class="si"><i class="fas fa-money-bill"></i></div><div class="sv">$${cap.toLocaleString('es-MX')}</div><div class="sl">Capital Total</div></div>
+    <div class="sc d"><div class="si"><i class="fas fa-exclamation"></i></div><div class="sv">${morosos}</div><div class="sl">Morosos</div></div>
+    <div class="sc i"><div class="si"><i class="fas fa-coins"></i></div><div class="sv">$${saldoT.toLocaleString('es-MX')}</div><div class="sl">Saldo por Cobrar</div></div>`;
+  document.getElementById('tb-rep').innerHTML = clientes.map(c=>{
+    const est = c.saldo===0?'Liquidado':c.alerta==='ATRASADO'?'Atrasado':'Activo';
+    const bc = est==='Liquidado'?'bi':est==='Atrasado'?'br':'bg';
+    return `<tr>
+      <td><strong>${c.nombre}</strong></td>
+      <td style="font-family:'DM Mono',monospace">$${c.monto.toLocaleString('es-MX')}</td>
+      <td style="font-family:'DM Mono',monospace">${c.pagadas}/${c.nq}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--warn)">$${c.saldo.toLocaleString('es-MX')}</td>
+      <td><span class="badge ${bc}">${est}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ============================================================
+   TABLA FACTORES
+============================================================ */
+function renderTF() {
+  const ms = [1000,2000,3000,4000,5000,6000,7000,8000,9000,10000,11000,12000,13000,14000,15000];
+  document.getElementById('tb-f').innerHTML = ms.map(m=>`<tr>
+    <td><strong style="font-family:'DM Mono',monospace">$${m.toLocaleString('es-MX')}</strong></td>
+    <td style="font-family:'DM Mono',monospace;color:var(--accent)">$${TF[m][6]}</td>
+    <td style="font-family:'DM Mono',monospace">$${TF[m][8]}</td>
+    <td style="font-family:'DM Mono',monospace">$${TF[m][10]}</td>
+    <td style="font-family:'DM Mono',monospace">${TF[m][12]?'$'+TF[m][12]:'<span class="badge bb">N/A</span>'}</td>
+    <td><span class="badge bg">+${Math.round(((TF[m][6]*6-m)/m)*100)}%</span></td>
+  </tr>`).join('');
+}
+
+/* ============================================================
+   EXPORT
+============================================================ */
+function doExport() {
+  const rows = [['#','Nombre','Monto','Pago Q','Plazo','Q Pagadas','Saldo','Estado'],
+    ...clientes.map((c,i)=>[i+1,c.nombre,c.monto,c.pq,c.nq+'Q',c.pagadas,c.saldo,
+      c.saldo===0?'Liquidado':c.alerta||'Al corriente'])];
+  const csv = rows.map(r=>r.join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  a.download = 'HDCredit_' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+  toast('Exportado ✅', 'ok');
+}
+
+/* ============================================================
+   MODAL / TOAST / VIEW HELPERS
+============================================================ */
+function om(id){document.getElementById(id).classList.add('open')}
+function cm(id){document.getElementById(id).classList.remove('open')}
+function set(id,v){document.getElementById(id).textContent=v}
+function toast(msg,type='ok'){
+  const el=document.createElement('div');
+  el.className='toast '+type;
+  const ic=type==='ok'?'fa-check-circle':type==='err'?'fa-times-circle':type==='wa'?'fa-whatsapp fab':'fa-exclamation-triangle';
+  const col=type==='ok'?'var(--accent)':type==='err'?'var(--danger)':type==='wa'?'#25d366':'var(--warn)';
+  el.innerHTML=`<i class="${type==='wa'?'fab':'fas'} ${type==='wa'?'fa-whatsapp':'fa-circle'}" style="color:${col}"></i> ${msg}`;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(()=>el.remove(),3800);
+}
+
+function gv(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('on'));
+  document.getElementById('v-'+name).classList.add('on');
+  document.querySelectorAll('.ni').forEach(n=>{
+    if(n.getAttribute('onclick')?.includes(name)) n.classList.add('on');
+  });
+  if(window.innerWidth<768){
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sbov').classList.remove('open');
+  }
+  if(name==='checklist') renderCL();
+  if(name==='historial') renderH();
+  if(name==='reportes') renderRep();
+}
+
+function toggleSB(){
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sbov').classList.toggle('open');
+}
+
+function refresh(){
+  renderDash();
+  renderC();
+  renderCL();
+  renderH();
+  renderRep();
+}
+
+/* ============================================================
+   QUINZENA SELECTOR INIT
+============================================================ */
+function initQSel(){
+  const sel=document.getElementById('qsel');
+  const qs=getQuincenas(12);
+  sel.innerHTML=qs.map(q=>`<option value="${q.key}">${q.label}</option>`).join('');
+  const cur=curQKey();
+  const opt=[...sel.options].find(o=>o.value===cur);
+  if(opt) sel.value=cur; else sel.selectedIndex=sel.options.length-1;
+}
+
+/* ============================================================
+   INIT
+============================================================ */
+function init(){
+  // Animate loader bar
+  setTimeout(()=>document.getElementById('lf').style.width='100%', 50);
+
+  initQSel();
+  renderTF();
+
+  const saved=localStorage.getItem('hd_fb');
+
+  // Hide loader after 1.6s then check config
+  setTimeout(()=>{
+    document.getElementById('loader').classList.add('hide');
+    setTimeout(()=>document.getElementById('loader').style.display='none',450);
+
+    if(!saved){
+      document.getElementById('fb-cfg').style.display='flex';
+      return;
+    }
+    if(saved==='local'){
+      loadLocal();
+      return;
+    }
+    try{
+      const cfg=JSON.parse(saved);
+      loadFirebaseSDK(cfg);
+    }catch(e){
+      loadLocal();
+    }
+  },1600);
+}
+
+// Expose globals
+window.openNew=openNew; window.editC=editC; window.saveC=saveC;
+window.calcPQ=calcPQ; window.confirmDel=confirmDel;
+window.togglePago=togglePago; window.openEC=openEC; window.sendEC=sendEC;
+window.waCliente=waCliente; window.waAll=waAll;
+window.filterC=filterC; window.filterH=filterH;
+window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
+window.doExport=doExport; window.connectFirebase=connectFirebase; window.goLocal=goLocal;
+window.om=om; window.cm=cm;
+
+init();
+</script>
+</body>
+</html>
