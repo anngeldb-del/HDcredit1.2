@@ -285,8 +285,8 @@ tbody tr:last-child td{border-bottom:none}
   </div>
   <div class="sb-nav">
     <div class="sb-sec">Principal</div>
-    <div class="ni on" onclick="gv('dashboard')"><i class="fas fa-chart-pie"></i> Dashboard</div>
-    <div class="ni" onclick="gv('checklist')"><i class="fas fa-check-square"></i> Checklist Pagos <span class="nb" id="nb-late" style="display:none">0</span></div>
+    <div class="ni on" onclick="gv('dashboard')"><i class="fas fa-chart-pie"></i> Panel Principal</div>
+    <div class="ni" onclick="gv('checklist')"><i class="fas fa-check-square"></i> Control de Cobros <span class="nb" id="nb-late" style="display:none">0</span></div>
     <div class="sb-sec">Gestión</div>
     <div class="ni" onclick="gv('clientes')"><i class="fas fa-users"></i> Acreditados</div>
     <div class="ni" onclick="gv('historial')"><i class="fas fa-history"></i> Historial</div>
@@ -313,7 +313,7 @@ tbody tr:last-child td{border-bottom:none}
 <div id="v-dashboard" class="view on">
   <div class="ph">
     <div>
-      <div class="pt">Dashboard</div>
+      <div class="pt">Panel Principal</div>
       <div class="ps" id="dash-date"></div>
     </div>
     <div class="ha">
@@ -349,7 +349,7 @@ tbody tr:last-child td{border-bottom:none}
 <!-- ═══════════ CHECKLIST ═══════════ -->
 <div id="v-checklist" class="view">
   <div class="ph">
-    <div><div class="pt">Checklist de Pagos</div><div class="ps">Marca con un solo clic</div></div>
+    <div><div class="pt">Control de Cobros</div><div class="ps">Marca con un solo clic</div></div>
     <div class="ha">
       <button class="btn btn-wa" onclick="waAll()"><i class="fab fa-whatsapp"></i> Recordatorio Masivo</button>
       <button class="btn btn-p" onclick="openNew()"><i class="fas fa-plus"></i> Agregar</button>
@@ -474,7 +474,7 @@ tbody tr:last-child td{border-bottom:none}
           <option value="10">10 Quincenas</option><option value="12">12 Quincenas</option>
         </select>
       </div>
-      <div class="fg"><label>Pago Quincenal</label><input class="fc" id="f-pq" readonly placeholder="Auto" style="color:var(--accent)"></div>
+      <div class="fg"><label>Pago Quincenal</label><input class="fc" id="f-pq" readonly placeholder="Calculado" style="color:var(--accent)"></div>
       <div class="fg"><label>Fecha Inicio</label><input class="fc" type="date" id="f-ini"></div>
       <div class="fg"><label>Q ya Pagadas</label><input class="fc" type="number" id="f-pag" value="0" min="0"></div>
       <div class="fg full"><label>WhatsApp (10 dígitos)</label><input class="fc" id="f-tel" placeholder="5512345678"></div>
