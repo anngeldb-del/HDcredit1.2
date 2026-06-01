@@ -1191,9 +1191,9 @@ function set(id,v){document.getElementById(id).textContent=v}
 function toast(msg,type='ok'){
   const el=document.createElement('div');
   el.className='toast '+type;
-  const ic=type==='ok'?'fa-check-circle':type==='err'?'fa-times-circle':type==='wa'?'fa-whatsapp fab':'fa-exclamation-triangle';
+  const ic=type==='ok'?'fa-check-circle':type==='err'?'fa-times-circle':type==='wa'?'fa-whatsapp':'fa-exclamation-triangle';
   const col=type==='ok'?'var(--accent)':type==='err'?'var(--danger)':type==='wa'?'#25d366':'var(--warn)';
-  el.innerHTML=`<i class="${type==='wa'?'fab':'fas'} ${type==='wa'?'fa-whatsapp':'fa-circle'}" style="color:${col}"></i> ${msg}`;
+  el.innerHTML=`<i class="${type==='wa'?'fab':'fas'} ${ic}" style="color:${col}"></i> ${msg}`;
   document.getElementById('toasts').appendChild(el);
   setTimeout(()=>el.remove(),3800);
 }
