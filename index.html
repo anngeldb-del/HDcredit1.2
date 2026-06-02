@@ -285,8 +285,7 @@ tbody tr:last-child td{border-bottom:none}
   </div>
   <div class="sb-nav">
     <div class="sb-sec">Principal</div>
-    <div class="ni on" onclick="gv('dashboard')"><i class="fas fa-chart-pie"></i> Panel Principal</div>
-    <div class="ni" onclick="gv('checklist')"><i class="fas fa-check-square"></i> Control de Cobros <span class="nb" id="nb-late" style="display:none">0</span></div>
+    <div class="ni on" onclick="gv('checklist')"><i class="fas fa-check-square"></i> Control de Cobros <span class="nb" id="nb-late" style="display:none">0</span></div>
     <div class="sb-sec">Gestión</div>
     <div class="ni" onclick="gv('clientes')"><i class="fas fa-users"></i> Acreditados</div>
     <div class="ni" onclick="gv('historial')"><i class="fas fa-history"></i> Historial</div>
@@ -294,6 +293,7 @@ tbody tr:last-child td{border-bottom:none}
     <div class="ni" onclick="gv('tabla')"><i class="fas fa-table"></i> Tabla de Factores</div>
     <div class="ni" onclick="gv('reportes')"><i class="fas fa-chart-bar"></i> Reportes</div>
     <div class="ni" onclick="doExport()"><i class="fas fa-file-csv"></i> Exportar CSV</div>
+    <div class="ni" onclick="gv('dashboard')"><i class="fas fa-chart-pie"></i> Panel Principal</div>
     <div class="sb-sec">Config</div>
     <div class="ni" onclick="document.getElementById('fb-cfg').style.display='flex'"><i class="fas fa-fire"></i> Firebase</div>
   </div>
@@ -310,7 +310,7 @@ tbody tr:last-child td{border-bottom:none}
 <div id="main">
 
 <!-- ═══════════ DASHBOARD ═══════════ -->
-<div id="v-dashboard" class="view on">
+<div id="v-dashboard" class="view">
   <div class="ph">
     <div>
       <div class="pt">Panel Principal</div>
@@ -347,7 +347,7 @@ tbody tr:last-child td{border-bottom:none}
 </div>
 
 <!-- ═══════════ CHECKLIST ═══════════ -->
-<div id="v-checklist" class="view">
+<div id="v-checklist" class="view on">
   <div class="ph">
     <div><div class="pt">Control de Cobros</div><div class="ps">Marca con un solo clic</div></div>
     <div class="ha">
