@@ -295,6 +295,12 @@ tbody tr:last-child td{border-bottom:none}
     <div class="fg"><label>Contraseña</label><input class="fc" id="auth-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <div id="auth-err" style="font-size:.78rem;color:var(--danger);margin-bottom:10px;min-height:18px"></div>
     <button class="btn btn-p" style="width:100%;justify-content:center" onclick="doLogin()"><i class="fas fa-lock-open"></i> Entrar</button>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+      <span style="font-size:.7rem;color:var(--muted)">o</span>
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+    <button class="btn btn-s" style="width:100%;justify-content:center;margin-top:10px" onclick="switchToLocal()"><i class="fas fa-laptop"></i> Continuar en modo local</button>
     <p style="font-size:.72rem;color:var(--muted);margin-top:12px;text-align:center">Solo usuarios autorizados · HD Crédit</p>
   </div>
 </div>
@@ -684,6 +690,12 @@ function doLogout() {
       location.reload();
     }
   }
+}
+
+function switchToLocal() {
+  localStorage.setItem('hd_fb', 'local');
+  document.getElementById('auth-wall').style.display = 'none';
+  loadLocal();
 }
 
 /* ============================================================
@@ -1451,6 +1463,7 @@ window.doExport=doExport; window.connectFirebase=connectFirebase; window.goLocal
 window.om=om; window.cm=cm;
 window.doLogin=doLogin; window.doLogout=doLogout;
 window.initPago=initPago; window.undoLastPago=undoLastPago;
+window.switchToLocal=switchToLocal;
 
 init();
 </script>
