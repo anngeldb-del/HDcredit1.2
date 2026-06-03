@@ -258,7 +258,8 @@ tbody tr:last-child td{border-bottom:none}
     <div class="cfg-steps">
       <div class="cstep"><div class="csn">1</div><div>Ve a <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> y crea un proyecto.</div></div>
       <div class="cstep"><div class="csn">2</div><div>Agrega una app web (&lt;/&gt;), copia el objeto <code style="color:var(--accent)">firebaseConfig</code>.</div></div>
-      <div class="cstep"><div class="csn">3</div><div>En Firestore → Reglas pon: <code style="color:var(--warn)">allow read, write: if true;</code></div></div>
+      <div class="cstep"><div class="csn">3</div><div>En Firestore → Reglas pon: <code style="color:var(--accent)">allow read, write: if request.auth != null;</code></div></div>
+      <div class="cstep"><div class="csn">4</div><div>En Authentication → Sign-in method, activa <strong>Correo/contraseña</strong> y crea un usuario.</div></div>
       <div class="cstep"><div class="csn">4</div><div>Pega el JSON abajo y haz clic en Conectar.</div></div>
     </div>
     <div class="fg">
@@ -270,6 +271,19 @@ tbody tr:last-child td{border-bottom:none}
       <button class="btn btn-s" onclick="goLocal()"><i class="fas fa-laptop"></i> Solo local (este dispositivo)</button>
     </div>
     <p style="font-size:.73rem;color:var(--muted);margin-top:10px">Modo local: datos guardados en este navegador. No se sincronizan entre dispositivos.</p>
+  </div>
+</div>
+
+<!-- AUTH WALL -->
+<div id="auth-wall" style="display:none;position:fixed;inset:0;background:var(--bg);align-items:center;justify-content:center;z-index:5500;padding:20px">
+  <div class="cfg-box" style="max-width:400px">
+    <div class="cfg-logo">HD Crédit</div>
+    <div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-bottom:20px">ACCESO SEGURO</div>
+    <div class="fg"><label>Correo</label><input class="fc" id="auth-email" type="email" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="fg"><label>Contraseña</label><input class="fc" id="auth-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div id="auth-err" style="font-size:.78rem;color:var(--danger);margin-bottom:10px;min-height:18px"></div>
+    <button class="btn btn-p" style="width:100%;justify-content:center" onclick="doLogin()"><i class="fas fa-lock-open"></i> Entrar</button>
+    <p style="font-size:.72rem;color:var(--muted);margin-top:12px;text-align:center">Solo usuarios autorizados · HD Crédit</p>
   </div>
 </div>
 
@@ -299,10 +313,11 @@ tbody tr:last-child td{border-bottom:none}
   </div>
   <div class="sb-foot">
     <div class="av">H</div>
-    <div>
-      <div class="ui-name">HD Crédit</div>
+    <div style="flex:1;min-width:0;overflow:hidden">
+      <div class="ui-name" id="auth-user" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">HD Crédit</div>
       <div class="ui-role" id="sync-lbl">● Local</div>
     </div>
+    <button onclick="doLogout()" title="Cerrar sesión" style="width:30px;height:30px;border-radius:8px;background:var(--border);color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;border:none;cursor:pointer;transition:all .2s"><i class="fas fa-sign-out-alt"></i></button>
   </div>
 </nav>
 
@@ -568,13 +583,17 @@ function connectFirebase() {
 }
 
 function loadFirebaseSDK(cfg) {
-  // Load Firebase scripts dynamically
   const s1 = document.createElement('script');
   s1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
   s1.onload = () => {
     const s2 = document.createElement('script');
     s2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
-    s2.onload = () => initFB(cfg);
+    s2.onload = () => {
+      const s3 = document.createElement('script');
+      s3.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js';
+      s3.onload = () => initFB(cfg);
+      document.head.appendChild(s3);
+    };
     document.head.appendChild(s2);
   };
   document.head.appendChild(s1);
@@ -588,14 +607,24 @@ function initFB(cfg) {
     document.getElementById('sync-lbl').textContent = '🟢 Firebase';
     document.getElementById('sync-lbl').style.color = 'var(--accent)';
     document.getElementById('fb-cfg').style.display = 'none';
-    toast('Firebase conectado ✅', 'ok');
-    startFBSync();
+    firebase.auth().onAuthStateChanged(user => {
+      if (user) {
+        document.getElementById('auth-wall').style.display = 'none';
+        const el = document.getElementById('auth-user');
+        el.textContent = user.email;
+        el.title = user.email;
+        if (!_syncStarted) { _syncStarted = true; startFBSync(); }
+      } else {
+        document.getElementById('auth-wall').style.display = 'flex';
+      }
+    });
   } catch(e) {
     console.error(e);
     toast('Error Firebase: ' + e.message, 'err');
     goLocal();
   }
 }
+let _syncStarted = false;
 
 function startFBSync() {
   DB.collection('clientes').orderBy('createdAt').onSnapshot(snap => {
@@ -614,6 +643,34 @@ function goLocal() {
   localStorage.setItem('hd_fb', 'local');
   document.getElementById('fb-cfg').style.display = 'none';
   loadLocal();
+}
+
+/* ============================================================
+   AUTH
+============================================================ */
+async function doLogin() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pass  = document.getElementById('auth-pass').value;
+  const errEl = document.getElementById('auth-err');
+  errEl.textContent = '';
+  if (!email || !pass) { errEl.textContent = 'Completa los campos'; return; }
+  try {
+    await firebase.auth().signInWithEmailAndPassword(email, pass);
+  } catch(e) {
+    const bad = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential','auth/invalid-email'];
+    errEl.textContent = bad.includes(e.code) ? 'Correo o contraseña incorrectos' : e.message;
+  }
+}
+
+function doLogout() {
+  if (USE_FB) {
+    firebase.auth().signOut();
+  } else {
+    if (confirm('¿Cerrar sesión local? Los datos permanecen en este navegador.')) {
+      localStorage.removeItem('hd_fb');
+      location.reload();
+    }
+  }
 }
 
 /* ============================================================
@@ -724,6 +781,47 @@ function curQKey() {
 }
 
 /* ============================================================
+   ATRASADO — cálculo real por fechas
+============================================================ */
+function qsElapsed(inicio) {
+  if (!inicio) return 0;
+  const start = new Date(inicio + 'T12:00:00');
+  const now   = new Date();
+  if (start >= now) return 0;
+  let count = 0;
+  let d = new Date(start);
+  // Avanzar al cierre de la quincena actual
+  d.getDate() <= 15
+    ? d.setDate(15)
+    : (d = new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  while (d < now && count <= 24) {
+    count++;
+    d = d.getDate() === 15
+      ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
+      : new Date(d.getFullYear(), d.getMonth() + 1, 15);
+  }
+  return count;
+}
+
+function calcAlerta(c) {
+  if (!c || c.saldo === 0 || c.pagadas >= c.nq) return '';
+  if (!c.inicio) return c.alerta || '';
+  const expected = Math.min(qsElapsed(c.inicio), c.nq);
+  return c.pagadas < expected ? 'ATRASADO' : '';
+}
+
+/* ============================================================
+   RESPALDO AUTOMÁTICO (últimas 2 sesiones)
+============================================================ */
+function autoBackup() {
+  if (!clientes.length) return;
+  try {
+    localStorage.setItem('hd_bk_1', localStorage.getItem('hd_bk_0') || '');
+    localStorage.setItem('hd_bk_0', JSON.stringify({ clientes, ts: new Date().toISOString() }));
+  } catch(e) { /* cuota llena — ignorar */ }
+}
+
+/* ============================================================
    CRUD
 ============================================================ */
 function openNew() {
@@ -781,7 +879,7 @@ async function saveC() {
   const saldo = Math.max(0, (nq - pagadas) * pq);
   const pagos = Array(12).fill(false).map((_,i) => i < pagadas);
   const data = { nombre, monto, pq, nq, inicio, pagadas, saldo, pagos, telefono, notas,
-    alerta: saldo === 0 ? '' : (pagadas < nq ? 'ATRASADO' : ''), updatedAt: new Date().toISOString() };
+    alerta: calcAlerta({saldo, pagadas, nq, inicio}), updatedAt: new Date().toISOString() };
 
   if (eid) {
     if (USE_FB) { await DB.collection('clientes').doc(eid).set(data, {merge:true}); }
@@ -863,7 +961,7 @@ function openEC(id) {
   }).join('');
 
   const estado = c.saldo===0 ? '✅ Liquidado'
-    : c.alerta==='ATRASADO' ? '⚠️ Con atraso'
+    : calcAlerta(c)==='ATRASADO' ? '⚠️ Con atraso'
     : '🟢 Al corriente';
 
   document.getElementById('ec-body').innerHTML = `
@@ -905,7 +1003,7 @@ function sendEC(c) {
   const faltantes = c.nq - c.pagadas;
   const saldo = faltantes * c.pq;
   const estado = c.saldo===0 ? 'LIQUIDADO ✅'
-    : c.alerta==='ATRASADO' ? 'CON ATRASO ⚠️'
+    : calcAlerta(c)==='ATRASADO' ? 'CON ATRASO ⚠️'
     : 'AL CORRIENTE ✅';
 
   const msg =
@@ -956,7 +1054,7 @@ function waAll() {
    RENDER DASHBOARD
 ============================================================ */
 function renderDash() {
-  const morosos = clientes.filter(c=>c.alerta==='ATRASADO');
+  const morosos = clientes.filter(c=>calcAlerta(c)==='ATRASADO');
   const activos = clientes.filter(c=>c.saldo>0);
   const capital = clientes.reduce((a,c)=>a+c.monto,0);
   const saldoTotal = clientes.reduce((a,c)=>a+c.saldo,0);
@@ -1019,7 +1117,7 @@ function renderC(list) {
   if (!data.length) { tb.innerHTML='<tr><td colspan="11" style="text-align:center;padding:28px;color:var(--muted)">Sin acreditados</td></tr>'; return; }
   tb.innerHTML = data.map((c,i)=>{
     const pct = c.nq ? Math.round((c.pagadas/c.nq)*100) : 0;
-    const est = c.saldo===0?'liq':c.alerta==='ATRASADO'?'at':'ok';
+    const est = c.saldo===0?'liq':calcAlerta(c)==='ATRASADO'?'at':'ok';
     const eb = est==='liq'?'<span class="badge bi">Liquidado</span>'
       :est==='at'?'<span class="badge br">⚠ Atrasado</span>'
       :'<span class="badge bg">✓ Al corriente</span>';
@@ -1050,7 +1148,7 @@ function filterC() {
   const est = document.getElementById('flt-est').value;
   const plazo = document.getElementById('flt-plazo').value;
   renderC(clientes.filter(c=>{
-    const e = c.saldo===0?'liquidado':c.alerta==='ATRASADO'?'atrasado':'al_corriente';
+    const e = c.saldo===0?'liquidado':calcAlerta(c)==='ATRASADO'?'atrasado':'al_corriente';
     return c.nombre.toLowerCase().includes(q)
       && (!est||e===est)
       && (!plazo||String(c.nq)===plazo);
@@ -1077,7 +1175,7 @@ function renderCL() {
   const html = activos.map((c,i)=>{
     const isPaid = historial.some(h=>h.clienteId===c.id&&h.qKey===qKey&&h.accion==='PAGO');
     if(isPaid) pagados++;
-    const isLate = c.alerta==='ATRASADO';
+    const isLate = calcAlerta(c)==='ATRASADO';
     const cls = isPaid?'ck':isLate?'lt':'u';
     const ico = isPaid?'fas fa-check':isLate?'fas fa-exclamation':'far fa-circle';
     return `<div class="ci${isPaid?' paid':''}">
@@ -1140,7 +1238,7 @@ function renderRep() {
     <div class="sc d"><div class="si"><i class="fas fa-exclamation"></i></div><div class="sv">${morosos}</div><div class="sl">Morosos</div></div>
     <div class="sc i"><div class="si"><i class="fas fa-coins"></i></div><div class="sv">$${saldoT.toLocaleString('es-MX')}</div><div class="sl">Saldo por Cobrar</div></div>`;
   document.getElementById('tb-rep').innerHTML = clientes.map(c=>{
-    const est = c.saldo===0?'Liquidado':c.alerta==='ATRASADO'?'Atrasado':'Activo';
+    const est = c.saldo===0?'Liquidado':calcAlerta(c)==='ATRASADO'?'Atrasado':'Activo';
     const bc = est==='Liquidado'?'bi':est==='Atrasado'?'br':'bg';
     return `<tr>
       <td><strong>${c.nombre}</strong></td>
@@ -1220,6 +1318,7 @@ function toggleSB(){
 }
 
 function refresh(){
+  autoBackup();
   renderDash();
   renderC();
   renderCL();
@@ -1282,6 +1381,7 @@ window.filterC=filterC; window.filterH=filterH;
 window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
 window.doExport=doExport; window.connectFirebase=connectFirebase; window.goLocal=goLocal;
 window.om=om; window.cm=cm;
+window.doLogin=doLogin; window.doLogout=doLogout;
 
 init();
 </script>
