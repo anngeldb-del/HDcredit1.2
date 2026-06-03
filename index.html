@@ -217,6 +217,18 @@ tbody tr:last-child td{border-bottom:none}
 .csn{width:22px;height:22px;border-radius:50%;background:var(--accent);color:#000;font-weight:700;font-size:.7rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
 .cstep a{color:var(--accent);text-decoration:underline}
 
+/* CONFIRMING (doble toque) */
+.pb2.confirming{border-color:var(--warn)!important;background:rgba(255,184,0,.2)!important;color:var(--warn)!important;animation:blink .5s ease infinite alternate}
+@keyframes blink{to{transform:scale(1.15);box-shadow:0 0 10px rgba(255,184,0,.4)}}
+
+/* UNDO BAR */
+#undo-bar{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid rgba(255,184,0,.3);border-radius:var(--radius);padding:10px 14px;margin:0 18px 10px;font-size:.84rem;position:relative;overflow:hidden}
+#undo-bar .undo-msg{flex:1;font-size:.83rem}
+.undo-btn{background:rgba(255,184,0,.12);color:var(--warn);border:1px solid rgba(255,184,0,.3);padding:6px 13px;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px;font-family:inherit}
+.undo-btn:hover,.undo-btn:active{background:var(--warn);color:#000}
+#undo-bar .undo-prog{position:absolute;bottom:0;left:0;height:3px;background:var(--warn);border-radius:99px;animation:shrinkbar 8s linear forwards}
+@keyframes shrinkbar{from{width:100%}to{width:0%}}
+
 /* RESPONSIVE */
 @media(max-width:768px){
   #sidebar{transform:translateX(-100%)}
@@ -364,7 +376,7 @@ tbody tr:last-child td{border-bottom:none}
 <!-- ═══════════ CHECKLIST ═══════════ -->
 <div id="v-checklist" class="view on">
   <div class="ph">
-    <div><div class="pt">Control de Cobros</div><div class="ps">Marca con un solo clic</div></div>
+    <div><div class="pt">Control de Cobros</div><div class="ps">Toca <strong style="color:var(--accent)">2 veces</strong> para cobrar · botón Deshacer disponible</div></div>
     <div class="ha">
       <button class="btn btn-wa" onclick="waAll()"><i class="fab fa-whatsapp"></i> Recordatorio Masivo</button>
       <button class="btn btn-p" onclick="openNew()"><i class="fas fa-plus"></i> Agregar</button>
@@ -556,6 +568,7 @@ const TF = {
 ============================================================ */
 let DB = null, USE_FB = false;
 let clientes = [], historial = [];
+let _pendingPago = {}, _lastPago = null, _undoing = false;
 
 /* ============================================================
    FIREBASE (lazy load)
@@ -940,6 +953,7 @@ async function togglePago(cid, qIdx) {
     saveLocal();
   }
   toast(pagos[qIdx] ? `✅ Pago — ${c.nombre} $${c.pq.toLocaleString('es-MX')}` : `↩️ Revertido — ${c.nombre}`, pagos[qIdx]?'ok':'wrn');
+  if (!_undoing) { _lastPago = {cid, qIdx}; showUndo(c.nombre, pagos[qIdx]); }
   renderCL();
   renderDash();
 }
@@ -1166,6 +1180,60 @@ function calcVenc(inicio, nq) {
 }
 
 /* ============================================================
+   DOBLE TOQUE + DESHACER
+============================================================ */
+function initPago(cid, qIdx) {
+  const key = cid + '_' + qIdx;
+  const btn = document.querySelector(`[data-pago="${key}"]`);
+  if (_pendingPago[key]) {
+    // segundo toque — confirmar
+    clearTimeout(_pendingPago[key]);
+    delete _pendingPago[key];
+    if (btn) { btn.classList.remove('confirming'); btn.innerHTML = btn._origHtml || ''; }
+    togglePago(cid, qIdx);
+  } else {
+    // primer toque — pedir confirmación visual
+    if (!btn) return;
+    btn._origHtml = btn.innerHTML;
+    btn.classList.add('confirming');
+    btn.innerHTML = '<i class="fas fa-question"></i>';
+    _pendingPago[key] = setTimeout(() => {
+      delete _pendingPago[key];
+      if (document.querySelector(`[data-pago="${key}"]`)) {
+        btn.classList.remove('confirming');
+        btn.innerHTML = btn._origHtml || '';
+      }
+    }, 2500);
+  }
+}
+
+function showUndo(nombre, wasPago) {
+  const existing = document.getElementById('undo-bar');
+  if (existing) { clearTimeout(Number(existing.dataset.timer)); existing.remove(); }
+  const bar = document.createElement('div');
+  bar.id = 'undo-bar';
+  bar.innerHTML = `
+    <span class="undo-msg">${wasPago ? '✅' : '↩️'} <strong>${nombre}</strong> — ${wasPago ? 'cobrado' : 'revertido'}</span>
+    <button class="undo-btn" onclick="undoLastPago()"><i class="fas fa-undo"></i> Deshacer</button>
+    <div class="undo-prog"></div>`;
+  const container = document.getElementById('cl-items');
+  if (container) container.parentNode.insertBefore(bar, container);
+  const t = setTimeout(() => { const b = document.getElementById('undo-bar'); if(b) b.remove(); }, 8000);
+  bar.dataset.timer = String(t);
+}
+
+async function undoLastPago() {
+  if (!_lastPago) return;
+  const bar = document.getElementById('undo-bar');
+  if (bar) { clearTimeout(Number(bar.dataset.timer)); bar.remove(); }
+  _undoing = true;
+  await togglePago(_lastPago.cid, _lastPago.qIdx);
+  _undoing = false;
+  _lastPago = null;
+  toast('↩️ Acción deshecha', 'wrn');
+}
+
+/* ============================================================
    RENDER CHECKLIST
 ============================================================ */
 function renderCL() {
@@ -1187,7 +1255,7 @@ function renderCL() {
       <div class="cdet">$${c.saldo.toLocaleString('es-MX')}<br><span style="font-size:.68rem;color:var(--muted)">saldo</span></div>
       <div class="camt">$${c.pq.toLocaleString('es-MX')}</div>
       <div style="display:flex;gap:5px;align-items:center">
-        <button class="pb2 ${cls}" onclick="togglePago('${c.id}',${c.pagadas})" title="${isPaid?'Revertir':'Registrar pago'}"><i class="${ico}"></i></button>
+        <button class="pb2 ${cls}" data-pago="${c.id}_${c.pagadas}" onclick="initPago('${c.id}',${c.pagadas})" title="${isPaid?'Toca 2 veces para revertir':'Toca 2 veces para cobrar'}"><i class="${ico}"></i></button>
         <button class="pb2 u" onclick="openEC('${c.id}')" title="Estado de cuenta" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-file-invoice" style="color:var(--info)"></i></button>
         ${c.telefono?`<button class="pb2 u" onclick="waCliente('${c.id}')" title="WhatsApp" style="width:30px;height:30px;font-size:.72rem"><i class="fab fa-whatsapp" style="color:#25d366"></i></button>`:''}
       </div>
@@ -1382,6 +1450,7 @@ window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
 window.doExport=doExport; window.connectFirebase=connectFirebase; window.goLocal=goLocal;
 window.om=om; window.cm=cm;
 window.doLogin=doLogin; window.doLogout=doLogout;
+window.initPago=initPago; window.undoLastPago=undoLastPago;
 
 init();
 </script>
