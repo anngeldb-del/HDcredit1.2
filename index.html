@@ -286,24 +286,6 @@ tbody tr:last-child td{border-bottom:none}
   </div>
 </div>
 
-<!-- AUTH WALL -->
-<div id="auth-wall" style="display:none;position:fixed;inset:0;background:var(--bg);align-items:center;justify-content:center;z-index:5500;padding:20px">
-  <div class="cfg-box" style="max-width:400px">
-    <div class="cfg-logo">HD Crédit</div>
-    <div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-bottom:20px">ACCESO SEGURO</div>
-    <div class="fg"><label>Correo</label><input class="fc" id="auth-email" type="email" placeholder="correo@ejemplo.com" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <div class="fg"><label>Contraseña</label><input class="fc" id="auth-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <div id="auth-err" style="font-size:.78rem;color:var(--danger);margin-bottom:10px;min-height:18px"></div>
-    <button class="btn btn-p" style="width:100%;justify-content:center" onclick="doLogin()"><i class="fas fa-lock-open"></i> Entrar</button>
-    <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
-      <div style="flex:1;height:1px;background:var(--border)"></div>
-      <span style="font-size:.7rem;color:var(--muted)">o</span>
-      <div style="flex:1;height:1px;background:var(--border)"></div>
-    </div>
-    <button class="btn btn-s" style="width:100%;justify-content:center;margin-top:10px" onclick="switchToLocal()"><i class="fas fa-laptop"></i> Continuar en modo local</button>
-    <p style="font-size:.72rem;color:var(--muted);margin-top:12px;text-align:center">Solo usuarios autorizados · HD Crédit</p>
-  </div>
-</div>
 
 <!-- HAMBURGER -->
 <button id="ham" onclick="toggleSB()"><span></span><span></span><span></span></button>
@@ -331,11 +313,10 @@ tbody tr:last-child td{border-bottom:none}
   </div>
   <div class="sb-foot">
     <div class="av">H</div>
-    <div style="flex:1;min-width:0;overflow:hidden">
-      <div class="ui-name" id="auth-user" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">HD Crédit</div>
+    <div>
+      <div class="ui-name">HD Crédit</div>
       <div class="ui-role" id="sync-lbl">● Local</div>
     </div>
-    <button onclick="doLogout()" title="Cerrar sesión" style="width:30px;height:30px;border-radius:8px;background:var(--border);color:var(--muted);display:flex;align-items:center;justify-content:center;flex-shrink:0;border:none;cursor:pointer;transition:all .2s"><i class="fas fa-sign-out-alt"></i></button>
   </div>
 </nav>
 
@@ -607,12 +588,7 @@ function loadFirebaseSDK(cfg) {
   s1.onload = () => {
     const s2 = document.createElement('script');
     s2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
-    s2.onload = () => {
-      const s3 = document.createElement('script');
-      s3.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js';
-      s3.onload = () => initFB(cfg);
-      document.head.appendChild(s3);
-    };
+    s2.onload = () => initFB(cfg);
     document.head.appendChild(s2);
   };
   document.head.appendChild(s1);
@@ -626,24 +602,14 @@ function initFB(cfg) {
     document.getElementById('sync-lbl').textContent = '🟢 Firebase';
     document.getElementById('sync-lbl').style.color = 'var(--accent)';
     document.getElementById('fb-cfg').style.display = 'none';
-    firebase.auth().onAuthStateChanged(user => {
-      if (user) {
-        document.getElementById('auth-wall').style.display = 'none';
-        const el = document.getElementById('auth-user');
-        el.textContent = user.email;
-        el.title = user.email;
-        if (!_syncStarted) { _syncStarted = true; startFBSync(); }
-      } else {
-        document.getElementById('auth-wall').style.display = 'flex';
-      }
-    });
+    toast('Firebase conectado ✅', 'ok');
+    startFBSync();
   } catch(e) {
     console.error(e);
     toast('Error Firebase: ' + e.message, 'err');
     goLocal();
   }
 }
-let _syncStarted = false;
 
 function startFBSync() {
   DB.collection('clientes').orderBy('createdAt').onSnapshot(snap => {
@@ -664,39 +630,6 @@ function goLocal() {
   loadLocal();
 }
 
-/* ============================================================
-   AUTH
-============================================================ */
-async function doLogin() {
-  const email = document.getElementById('auth-email').value.trim();
-  const pass  = document.getElementById('auth-pass').value;
-  const errEl = document.getElementById('auth-err');
-  errEl.textContent = '';
-  if (!email || !pass) { errEl.textContent = 'Completa los campos'; return; }
-  try {
-    await firebase.auth().signInWithEmailAndPassword(email, pass);
-  } catch(e) {
-    const bad = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential','auth/invalid-email'];
-    errEl.textContent = bad.includes(e.code) ? 'Correo o contraseña incorrectos' : e.message;
-  }
-}
-
-function doLogout() {
-  if (USE_FB) {
-    firebase.auth().signOut();
-  } else {
-    if (confirm('¿Cerrar sesión local? Los datos permanecen en este navegador.')) {
-      localStorage.removeItem('hd_fb');
-      location.reload();
-    }
-  }
-}
-
-function switchToLocal() {
-  localStorage.setItem('hd_fb', 'local');
-  document.getElementById('auth-wall').style.display = 'none';
-  loadLocal();
-}
 
 /* ============================================================
    LOCAL STORAGE
@@ -1461,9 +1394,7 @@ window.filterC=filterC; window.filterH=filterH;
 window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
 window.doExport=doExport; window.connectFirebase=connectFirebase; window.goLocal=goLocal;
 window.om=om; window.cm=cm;
-window.doLogin=doLogin; window.doLogout=doLogout;
 window.initPago=initPago; window.undoLastPago=undoLastPago;
-window.switchToLocal=switchToLocal;
 
 init();
 </script>
