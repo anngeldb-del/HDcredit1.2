@@ -936,7 +936,6 @@ function openEC(id) {
       <div class="ec-title">Avance de pagos</div>
       <div class="ec-row"><span class="ec-lbl">Quincenas pagadas</span><span class="ec-val" style="color:var(--accent)">${c.pagadas} de ${c.nq}</span></div>
       <div class="ec-row"><span class="ec-lbl">Quincenas restantes</span><span class="ec-val" style="color:${faltantes>0?'var(--warn)':'var(--accent)'}">${faltantes}</span></div>
-      <div class="ec-row"><span class="ec-lbl">Saldo pendiente</span><span class="ec-val" style="color:${saldo>0?'var(--warn)':'var(--accent)'}">$${saldo.toLocaleString('es-MX')}</span></div>
       <div style="margin-top:12px">
         <div class="ec-title" style="margin-bottom:8px">Progreso visual</div>
         <div class="ec-timeline">${timeline}</div>
