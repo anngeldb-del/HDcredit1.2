@@ -455,7 +455,7 @@ tbody tr:last-child td{border-bottom:none}
     <div class="tw">
       <div style="padding:14px 18px;border-bottom:1px solid var(--border)"><strong style="font-family:'Syne',sans-serif">Resumen por Acreditado</strong></div>
       <div class="ts"><table><thead><tr>
-        <th>Nombre</th><th>Capital</th><th>Q Pagadas</th><th>Saldo</th><th>Estado</th>
+        <th>Nombre</th><th>Capital</th><th>Q Pagadas</th><th>Estado</th>
       </tr></thead><tbody id="tb-rep"></tbody></table></div>
     </div>
   </div>
@@ -936,6 +936,7 @@ function openEC(id) {
       <div class="ec-title">Avance de pagos</div>
       <div class="ec-row"><span class="ec-lbl">Quincenas pagadas</span><span class="ec-val" style="color:var(--accent)">${c.pagadas} de ${c.nq}</span></div>
       <div class="ec-row"><span class="ec-lbl">Quincenas restantes</span><span class="ec-val" style="color:${faltantes>0?'var(--warn)':'var(--accent)'}">${faltantes}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Saldo pendiente</span><span class="ec-val" style="color:${saldo>0?'var(--warn)':'var(--accent)'}">$${saldo.toLocaleString('es-MX')}</span></div>
       <div style="margin-top:12px">
         <div class="ec-title" style="margin-bottom:8px">Progreso visual</div>
         <div class="ec-timeline">${timeline}</div>
@@ -1256,7 +1257,6 @@ function renderRep() {
       <td><strong>${c.nombre}</strong></td>
       <td style="font-family:'DM Mono',monospace">$${c.monto.toLocaleString('es-MX')}</td>
       <td style="font-family:'DM Mono',monospace">${c.pagadas}/${c.nq}</td>
-      <td style="font-family:'DM Mono',monospace;color:var(--warn)">$${c.saldo.toLocaleString('es-MX')}</td>
       <td><span class="badge ${bc}">${est}</span></td>
     </tr>`;
   }).join('');
