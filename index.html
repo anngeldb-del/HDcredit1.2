@@ -307,6 +307,8 @@ tbody tr:last-child td{border-bottom:none}
     <div class="ni" onclick="gv('tabla')"><i class="fas fa-table"></i> Tabla de Factores</div>
     <div class="ni" onclick="gv('reportes')"><i class="fas fa-chart-bar"></i> Reportes</div>
     <div class="ni" onclick="doExport()"><i class="fas fa-file-csv"></i> Exportar CSV</div>
+    <div class="ni" onclick="doExportJSON()"><i class="fas fa-download"></i> Respaldo JSON</div>
+    <div class="ni" onclick="doImportJSON()"><i class="fas fa-upload"></i> Restaurar JSON</div>
     <div class="ni" onclick="gv('dashboard')"><i class="fas fa-chart-pie"></i> Panel Principal</div>
     <div class="sb-sec">Config</div>
     <div class="ni" onclick="document.getElementById('fb-cfg').style.display='flex'"><i class="fas fa-fire"></i> Firebase</div>
@@ -613,13 +615,20 @@ function initFB(cfg) {
 
 function startFBSync() {
   DB.collection('clientes').orderBy('createdAt').onSnapshot(snap => {
-    clientes = snap.docs.map(d => ({id: d.id, ...d.data()}));
-    localStorage.setItem('hd_c', JSON.stringify(clientes));
+    const datos = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    // Solo sobreescribir caché local si Firebase devuelve datos reales
+    if (datos.length > 0 || clientes.length === 0) {
+      clientes = datos;
+      localStorage.setItem('hd_c', JSON.stringify(clientes));
+    }
     refresh();
   });
   DB.collection('historial').orderBy('ts', 'desc').limit(500).onSnapshot(snap => {
-    historial = snap.docs.map(d => ({id: d.id, ...d.data()}));
-    localStorage.setItem('hd_h', JSON.stringify(historial));
+    const datos = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    if (datos.length > 0 || historial.length === 0) {
+      historial = datos;
+      localStorage.setItem('hd_h', JSON.stringify(historial));
+    }
     renderH();
   });
 }
@@ -637,7 +646,20 @@ function goLocal() {
 function loadLocal() {
   clientes = JSON.parse(localStorage.getItem('hd_c') || '[]');
   historial = JSON.parse(localStorage.getItem('hd_h') || '[]');
-  if (!clientes.length) seedData();
+  // Si no hay datos, intentar recuperar del respaldo automático antes de rendirnos
+  if (!clientes.length) {
+    for (const bkKey of ['hd_bk_0', 'hd_bk_1']) {
+      try {
+        const bk = JSON.parse(localStorage.getItem(bkKey) || 'null');
+        if (bk && Array.isArray(bk.clientes) && bk.clientes.length) {
+          clientes = bk.clientes;
+          saveLocal();
+          toast('Datos recuperados del respaldo automático (' + new Date(bk.ts).toLocaleDateString() + ') ✅', 'ok');
+          break;
+        }
+      } catch(e) { /* respaldo corrupto, ignorar */ }
+    }
+  }
   refresh();
 }
 
@@ -1279,7 +1301,7 @@ function renderTF() {
 }
 
 /* ============================================================
-   EXPORT
+   EXPORT / IMPORT
 ============================================================ */
 function doExport() {
   const rows = [['#','Nombre','Monto','Pago Q','Plazo','Q Pagadas','Saldo','Estado'],
@@ -1290,7 +1312,49 @@ function doExport() {
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download = 'HDCredit_' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
-  toast('Exportado ✅', 'ok');
+  toast('Exportado CSV ✅', 'ok');
+}
+
+function doExportJSON() {
+  if (!clientes.length) { toast('No hay datos para exportar', 'err'); return; }
+  const payload = { clientes, historial, ts: new Date().toISOString(), v: '2.1' };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'}));
+  a.download = 'HDCredit_respaldo_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+  toast('Respaldo JSON descargado ✅', 'ok');
+}
+
+function doImportJSON() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const payload = JSON.parse(ev.target.result);
+        if (!payload.clientes || !Array.isArray(payload.clientes) || !payload.clientes.length) {
+          toast('Archivo inválido o sin clientes', 'err'); return;
+        }
+        const confirmar = confirm(
+          `¿Importar ${payload.clientes.length} clientes del respaldo del ${new Date(payload.ts).toLocaleDateString()}?\n\nEsto reemplazará los datos actuales.`
+        );
+        if (!confirmar) return;
+        clientes = payload.clientes;
+        historial = Array.isArray(payload.historial) ? payload.historial : [];
+        saveLocal();
+        refresh();
+        toast(`${clientes.length} clientes restaurados ✅`, 'ok');
+      } catch(err) {
+        toast('Error al leer el archivo: ' + err.message, 'err');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
 }
 
 /* ============================================================
@@ -1392,7 +1456,8 @@ window.togglePago=togglePago; window.openEC=openEC; window.sendEC=sendEC;
 window.waCliente=waCliente; window.waAll=waAll;
 window.filterC=filterC; window.filterH=filterH;
 window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
-window.doExport=doExport; window.connectFirebase=connectFirebase; window.goLocal=goLocal;
+window.doExport=doExport; window.doExportJSON=doExportJSON; window.doImportJSON=doImportJSON;
+window.connectFirebase=connectFirebase; window.goLocal=goLocal;
 window.om=om; window.cm=cm;
 window.initPago=initPago; window.undoLastPago=undoLastPago;
 
