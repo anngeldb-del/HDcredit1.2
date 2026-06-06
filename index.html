@@ -11,8 +11,19 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <script>
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js');
+    window.addEventListener('load', async () => {
+      // Limpiar caches viejos antes de registrar
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+      // Registrar SW actualizado
+      const reg = await navigator.serviceWorker.register('sw.js');
+      // Si hay nueva versión esperando, activarla inmediatamente
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'activated') location.reload();
+        });
+      });
     });
   }
 </script>
