@@ -1175,7 +1175,7 @@ function calcVenc(inicio, nq) {
 /* ============================================================
    DOBLE TOQUE + DESHACER
 ============================================================ */
-function initPago(cid, qIdx) {
+async function initPago(cid, qIdx) {
   const key = cid + '_' + qIdx;
   const btn = document.querySelector(`[data-pago="${key}"]`);
   if (_pendingPago[key]) {
