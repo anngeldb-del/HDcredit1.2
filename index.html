@@ -332,6 +332,8 @@ tbody tr:last-child td{border-bottom:none}
     <div class="ni" onclick="gv('tabla')"><i class="fas fa-table"></i> Tabla de Factores</div>
     <div class="ni" onclick="gv('reportes')"><i class="fas fa-chart-bar"></i> Reportes</div>
     <div class="ni" onclick="doExport()"><i class="fas fa-file-csv"></i> Exportar CSV</div>
+    <div class="ni" onclick="doExportJSON()"><i class="fas fa-download"></i> Respaldo JSON</div>
+    <div class="ni" onclick="doImportJSON()"><i class="fas fa-upload"></i> Restaurar JSON</div>
     <div class="ni" onclick="gv('dashboard')"><i class="fas fa-chart-pie"></i> Panel Principal</div>
     <div class="sb-sec">Config</div>
     <div class="ni" onclick="document.getElementById('fb-cfg').style.display='flex'"><i class="fas fa-fire"></i> Firebase</div>
@@ -638,13 +640,20 @@ function initFB(cfg) {
 
 function startFBSync() {
   DB.collection('clientes').orderBy('createdAt').onSnapshot(snap => {
-    clientes = snap.docs.map(d => ({id: d.id, ...d.data()}));
-    localStorage.setItem('hd_c', JSON.stringify(clientes));
+    const datos = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    // Solo sobreescribir caché local si Firebase devuelve datos reales
+    if (datos.length > 0 || clientes.length === 0) {
+      clientes = datos;
+      localStorage.setItem('hd_c', JSON.stringify(clientes));
+    }
     refresh();
   });
   DB.collection('historial').orderBy('ts', 'desc').limit(500).onSnapshot(snap => {
-    historial = snap.docs.map(d => ({id: d.id, ...d.data()}));
-    localStorage.setItem('hd_h', JSON.stringify(historial));
+    const datos = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    if (datos.length > 0 || historial.length === 0) {
+      historial = datos;
+      localStorage.setItem('hd_h', JSON.stringify(historial));
+    }
     renderH();
   });
 }
@@ -662,7 +671,20 @@ function goLocal() {
 function loadLocal() {
   clientes = JSON.parse(localStorage.getItem('hd_c') || '[]');
   historial = JSON.parse(localStorage.getItem('hd_h') || '[]');
-  if (!clientes.length) seedData();
+  // Si no hay datos, intentar recuperar del respaldo automático antes de rendirnos
+  if (!clientes.length) {
+    for (const bkKey of ['hd_bk_0', 'hd_bk_1']) {
+      try {
+        const bk = JSON.parse(localStorage.getItem(bkKey) || 'null');
+        if (bk && Array.isArray(bk.clientes) && bk.clientes.length) {
+          clientes = bk.clientes;
+          saveLocal();
+          toast('Datos recuperados del respaldo automático (' + new Date(bk.ts).toLocaleDateString() + ') ✅', 'ok');
+          break;
+        }
+      } catch(e) { /* respaldo corrupto, ignorar */ }
+    }
+  }
   refresh();
 }
 
@@ -774,7 +796,8 @@ function qsElapsed(inicio) {
   let count = 0;
   let d = new Date(start);
   // Avanzar al cierre de la quincena actual
-  d.getDate() <= 15
+  // < 15 (no <=): el día 15 es inicio de quincena, su cierre es el último del mes
+  d.getDate() < 15
     ? d.setDate(15)
     : (d = new Date(d.getFullYear(), d.getMonth() + 1, 0));
   while (d < now && count <= 24) {
@@ -860,7 +883,7 @@ async function saveC() {
 
   const pq = TF[monto][nq];
   const saldo = Math.max(0, (nq - pagadas) * pq);
-  const pagos = Array(12).fill(false).map((_,i) => i < pagadas);
+  const pagos = Array(nq).fill(false).map((_,i) => i < pagadas);
   const data = { nombre, monto, pq, nq, inicio, pagadas, saldo, pagos, telefono, notas,
     alerta: calcAlerta({saldo, pagadas, nq, inicio}), updatedAt: new Date().toISOString() };
 
@@ -897,7 +920,7 @@ async function delC(id) {
 ============================================================ */
 async function togglePago(cid, qIdx) {
   const c = clientes.find(x=>x.id===cid); if(!c) return;
-  const pagos = [...(c.pagos||Array(12).fill(false))];
+  const pagos = [...(c.pagos||Array(c.nq||12).fill(false))];
   pagos[qIdx] = !pagos[qIdx];
   const pagadas = pagos.filter(Boolean).length;
   const saldo = Math.max(0, (c.nq - pagadas) * c.pq);
@@ -951,7 +974,7 @@ function openEC(id) {
   document.getElementById('ec-body').innerHTML = `
     <div class="ec-card">
       <div class="ec-title">Información del préstamo</div>
-      <div class="ec-row"><span class="ec-lbl">Acreditado</span><span class="ec-val">${c.nombre}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Acreditado</span><span class="ec-val">${esc(c.nombre)}</span></div>
       <div class="ec-row"><span class="ec-lbl">Monto prestado</span><span class="ec-val" style="color:var(--accent)">$${c.monto.toLocaleString('es-MX')}</span></div>
       <div class="ec-row"><span class="ec-lbl">Plazo total</span><span class="ec-val">${c.nq} quincenas</span></div>
       <div class="ec-row"><span class="ec-lbl">Pago quincenal</span><span class="ec-val">$${c.pq.toLocaleString('es-MX')}</span></div>
@@ -1064,8 +1087,8 @@ function renderDash() {
   const ml = document.getElementById('d-morosos');
   ml.innerHTML = morosos.length ? morosos.slice(0,6).map(c=>`
     <div class="mi">
-      <div class="mav">${c.nombre[0]}</div>
-      <div><div class="mn">${c.nombre}</div><div class="md">$${c.saldo.toLocaleString('es-MX')} · ${c.nq-c.pagadas}Q rest.</div></div>
+      <div class="mav">${esc(c.nombre[0])}</div>
+      <div><div class="mn">${esc(c.nombre)}</div><div class="md">$${c.saldo.toLocaleString('es-MX')} · ${c.nq-c.pagadas}Q rest.</div></div>
       ${c.telefono?`<button class="btn btn-wa btn-sm btn-ic" onclick="waCliente('${c.id}')" style="margin-left:auto"><i class="fab fa-whatsapp"></i></button>`:''}
     </div>`).join('')
     : '<p style="color:var(--muted);font-size:.84rem;text-align:center;padding:18px">✅ Sin morosos</p>';
@@ -1075,8 +1098,8 @@ function renderDash() {
   const pl = document.getElementById('d-prox');
   pl.innerHTML = prox.length ? prox.slice(0,5).map(c=>`
     <div class="mi">
-      <div class="mav" style="background:rgba(255,184,0,.14);border-color:rgba(255,184,0,.3);color:var(--warn)">${c.nombre[0]}</div>
-      <div><div class="mn">${c.nombre}</div><div style="font-size:.73rem;color:var(--warn);font-family:'DM Mono',monospace">${c.nq-c.pagadas}Q restantes</div></div>
+      <div class="mav" style="background:rgba(255,184,0,.14);border-color:rgba(255,184,0,.3);color:var(--warn)">${esc(c.nombre[0])}</div>
+      <div><div class="mn">${esc(c.nombre)}</div><div style="font-size:.73rem;color:var(--warn);font-family:'DM Mono',monospace">${c.nq-c.pagadas}Q restantes</div></div>
       <span class="badge by" style="margin-left:auto">${c.nq-c.pagadas}Q</span>
     </div>`).join('')
     : '<p style="color:var(--muted);font-size:.84rem;text-align:center;padding:18px">Sin vencimientos próximos</p>';
@@ -1108,7 +1131,7 @@ function renderC(list) {
     const fv = calcVenc(c.inicio, c.nq);
     return `<tr>
       <td><span style="font-family:'DM Mono',monospace;color:var(--muted)">${String(i+1).padStart(2,'0')}</span></td>
-      <td><strong>${c.nombre}</strong></td>
+      <td><strong>${esc(c.nombre)}</strong></td>
       <td><span style="font-family:'DM Mono',monospace;color:var(--accent)">$${c.monto.toLocaleString('es-MX')}</span></td>
       <td><span style="font-family:'DM Mono',monospace">$${c.pq.toLocaleString('es-MX')}</span></td>
       <td><span class="badge bb">${c.nq}Q</span></td>
@@ -1160,7 +1183,7 @@ function initPago(cid, qIdx) {
     clearTimeout(_pendingPago[key]);
     delete _pendingPago[key];
     if (btn) { btn.classList.remove('confirming'); btn.innerHTML = btn._origHtml || ''; }
-    togglePago(cid, qIdx);
+    await togglePago(cid, qIdx);
   } else {
     // primer toque — pedir confirmación visual
     if (!btn) return;
@@ -1169,9 +1192,11 @@ function initPago(cid, qIdx) {
     btn.innerHTML = '<i class="fas fa-question"></i>';
     _pendingPago[key] = setTimeout(() => {
       delete _pendingPago[key];
-      if (document.querySelector(`[data-pago="${key}"]`)) {
-        btn.classList.remove('confirming');
-        btn.innerHTML = btn._origHtml || '';
+      // Usar referencia fresca al botón por si el DOM se re-renderizó
+      const freshBtn = document.querySelector(`[data-pago="${key}"]`);
+      if (freshBtn) {
+        freshBtn.classList.remove('confirming');
+        freshBtn.innerHTML = btn._origHtml || '';
       }
     }, 2500);
   }
@@ -1183,7 +1208,7 @@ function showUndo(nombre, wasPago) {
   const bar = document.createElement('div');
   bar.id = 'undo-bar';
   bar.innerHTML = `
-    <span class="undo-msg">${wasPago ? '✅' : '↩️'} <strong>${nombre}</strong> — ${wasPago ? 'cobrado' : 'revertido'}</span>
+    <span class="undo-msg">${wasPago ? '✅' : '↩️'} <strong>${esc(nombre)}</strong> — ${wasPago ? 'cobrado' : 'revertido'}</span>
     <button class="undo-btn" onclick="undoLastPago()"><i class="fas fa-undo"></i> Deshacer</button>
     <div class="undo-prog"></div>`;
   const container = document.getElementById('cl-items');
@@ -1219,7 +1244,7 @@ function renderCL() {
     return `<div class="ci${isPaid?' paid':''}">
       <div class="cn">${String(i+1).padStart(2,'0')}</div>
       <div>
-        <div class="cname">${c.nombre}</div>
+        <div class="cname">${esc(c.nombre)}</div>
         <div style="font-size:.7rem;color:var(--muted);margin-top:2px">${c.pagadas}/${c.nq}Q · ${c.nq-c.pagadas} restantes</div>
       </div>
       <div class="cdet">$${c.saldo.toLocaleString('es-MX')}<br><span style="font-size:.68rem;color:var(--muted)">saldo</span></div>
@@ -1279,7 +1304,7 @@ function renderRep() {
     const est = c.saldo===0?'Liquidado':calcAlerta(c)==='ATRASADO'?'Atrasado':'Activo';
     const bc = est==='Liquidado'?'bi':est==='Atrasado'?'br':'bg';
     return `<tr>
-      <td><strong>${c.nombre}</strong></td>
+      <td><strong>${esc(c.nombre)}</strong></td>
       <td style="font-family:'DM Mono',monospace">$${c.monto.toLocaleString('es-MX')}</td>
       <td style="font-family:'DM Mono',monospace">${c.pagadas}/${c.nq}</td>
       <td style="font-family:'DM Mono',monospace;color:var(--warn)">$${c.saldo.toLocaleString('es-MX')}</td>
@@ -1304,7 +1329,7 @@ function renderTF() {
 }
 
 /* ============================================================
-   EXPORT
+   EXPORT / IMPORT
 ============================================================ */
 function doExport() {
   const rows = [['#','Nombre','Monto','Pago Q','Plazo','Q Pagadas','Saldo','Estado'],
@@ -1315,12 +1340,55 @@ function doExport() {
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download = 'HDCredit_' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
-  toast('Exportado ✅', 'ok');
+  toast('Exportado CSV ✅', 'ok');
+}
+
+function doExportJSON() {
+  if (!clientes.length) { toast('No hay datos para exportar', 'err'); return; }
+  const payload = { clientes, historial, ts: new Date().toISOString(), v: '2.1' };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'}));
+  a.download = 'HDCredit_respaldo_' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+  toast('Respaldo JSON descargado ✅', 'ok');
+}
+
+function doImportJSON() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const payload = JSON.parse(ev.target.result);
+        if (!payload.clientes || !Array.isArray(payload.clientes) || !payload.clientes.length) {
+          toast('Archivo inválido o sin clientes', 'err'); return;
+        }
+        const confirmar = confirm(
+          `¿Importar ${payload.clientes.length} clientes del respaldo del ${new Date(payload.ts).toLocaleDateString()}?\n\nEsto reemplazará los datos actuales.`
+        );
+        if (!confirmar) return;
+        clientes = payload.clientes;
+        historial = Array.isArray(payload.historial) ? payload.historial : [];
+        saveLocal();
+        refresh();
+        toast(`${clientes.length} clientes restaurados ✅`, 'ok');
+      } catch(err) {
+        toast('Error al leer el archivo: ' + err.message, 'err');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
 }
 
 /* ============================================================
    MODAL / TOAST / VIEW HELPERS
 ============================================================ */
+function esc(s){ const d=document.createElement('div'); d.textContent=String(s??''); return d.innerHTML; }
 function om(id){document.getElementById(id).classList.add('open')}
 function cm(id){document.getElementById(id).classList.remove('open')}
 function set(id,v){document.getElementById(id).textContent=v}
@@ -1417,7 +1485,8 @@ window.togglePago=togglePago; window.openEC=openEC; window.sendEC=sendEC;
 window.waCliente=waCliente; window.waAll=waAll;
 window.filterC=filterC; window.filterH=filterH;
 window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
-window.doExport=doExport; window.connectFirebase=connectFirebase; window.goLocal=goLocal;
+window.doExport=doExport; window.doExportJSON=doExportJSON; window.doImportJSON=doImportJSON;
+window.connectFirebase=connectFirebase; window.goLocal=goLocal;
 window.om=om; window.cm=cm;
 window.initPago=initPago; window.undoLastPago=undoLastPago;
 
