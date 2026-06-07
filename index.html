@@ -936,12 +936,13 @@ async function togglePago(cid, qIdx) {
     ts: now.toISOString()
   };
 
+  const alerta = calcAlerta({...c, pagadas, saldo});
   if (USE_FB) {
-    await DB.collection('clientes').doc(cid).set({pagos, pagadas, saldo}, {merge:true});
+    await DB.collection('clientes').doc(cid).set({pagos, pagadas, saldo, alerta}, {merge:true});
     await DB.collection('historial').doc(log.id).set(log);
   } else {
     const i = clientes.findIndex(x=>x.id===cid);
-    clientes[i] = {...clientes[i], pagos, pagadas, saldo};
+    clientes[i] = {...clientes[i], pagos, pagadas, saldo, alerta};
     historial.unshift(log);
     saveLocal();
   }
@@ -1294,7 +1295,7 @@ function filterH() {
 function renderRep() {
   const cap = clientes.reduce((a,c)=>a+c.monto,0);
   const saldoT = clientes.reduce((a,c)=>a+c.saldo,0);
-  const morosos = clientes.filter(c=>c.alerta==='ATRASADO').length;
+  const morosos = clientes.filter(c=>calcAlerta(c)==='ATRASADO').length;
   document.getElementById('rep-stats').innerHTML = `
     <div class="sc"><div class="si"><i class="fas fa-users"></i></div><div class="sv">${clientes.length}</div><div class="sl">Total Acreditados</div></div>
     <div class="sc w"><div class="si"><i class="fas fa-money-bill"></i></div><div class="sv">$${cap.toLocaleString('es-MX')}</div><div class="sl">Capital Total</div></div>
