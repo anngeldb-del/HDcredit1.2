@@ -438,7 +438,7 @@ tbody tr:last-child td{border-bottom:none}
       <div class="ts"><table><thead><tr>
         <th>#</th><th>Nombre</th><th>Monto</th><th>Pago Q</th>
         <th>Plazo</th><th>Q Pagadas</th><th>Progreso</th>
-        <th>Saldo</th><th>Estado</th><th>Vence</th><th>Acciones</th>
+        <th>Saldo</th><th>Estado</th><th>Inicio</th><th>Vence</th><th>Acciones</th>
       </tr></thead><tbody id="tb-c"></tbody></table></div>
     </div>
   </div>
@@ -644,6 +644,7 @@ function startFBSync() {
     // Solo sobreescribir caché local si Firebase devuelve datos reales
     if (datos.length > 0 || clientes.length === 0) {
       clientes = datos;
+      syncAlertas();
       localStorage.setItem('hd_c', JSON.stringify(clientes));
     }
     refresh();
@@ -668,6 +669,16 @@ function goLocal() {
 /* ============================================================
    LOCAL STORAGE
 ============================================================ */
+function syncAlertas() {
+  let changed = false;
+  clientes = clientes.map(c => {
+    const alerta = calcAlerta(c);
+    if (alerta !== (c.alerta || '')) { changed = true; return {...c, alerta}; }
+    return c;
+  });
+  if (changed) saveLocal();
+}
+
 function loadLocal() {
   clientes = JSON.parse(localStorage.getItem('hd_c') || '[]');
   historial = JSON.parse(localStorage.getItem('hd_h') || '[]');
@@ -678,13 +689,13 @@ function loadLocal() {
         const bk = JSON.parse(localStorage.getItem(bkKey) || 'null');
         if (bk && Array.isArray(bk.clientes) && bk.clientes.length) {
           clientes = bk.clientes;
-          saveLocal();
           toast('Datos recuperados del respaldo automático (' + new Date(bk.ts).toLocaleDateString() + ') ✅', 'ok');
           break;
         }
       } catch(e) { /* respaldo corrupto, ignorar */ }
     }
   }
+  syncAlertas();
   refresh();
 }
 
@@ -788,30 +799,35 @@ function curQKey() {
 /* ============================================================
    ATRASADO — cálculo real por fechas
 ============================================================ */
+function nextQBoundary(d) {
+  return d.getDate() === 15
+    ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
+    : new Date(d.getFullYear(), d.getMonth() + 1, 15);
+}
 function qsElapsed(inicio) {
   if (!inicio) return 0;
   const start = new Date(inicio + 'T12:00:00');
   const now   = new Date();
   if (start >= now) return 0;
-  let count = 0;
   let d = new Date(start);
-  // Avanzar al cierre de la quincena actual
-  // < 15 (no <=): el día 15 es inicio de quincena, su cierre es el último del mes
+  // Avanzar al cierre de la quincena de inicio
   d.getDate() < 15
     ? d.setDate(15)
     : (d = new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  // El primer pago vence en la quincena SIGUIENTE a la del inicio
+  // (el cliente tiene una quincena completa de gracia antes del primer cobro)
+  d = nextQBoundary(d);
+  let count = 0;
   while (d < now && count <= 24) {
     count++;
-    d = d.getDate() === 15
-      ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
-      : new Date(d.getFullYear(), d.getMonth() + 1, 15);
+    d = nextQBoundary(d);
   }
   return count;
 }
 
 function calcAlerta(c) {
   if (!c || c.saldo === 0 || c.pagadas >= c.nq) return '';
-  if (!c.inicio) return c.alerta || '';
+  if (!c.inicio) return '';
   const expected = Math.min(qsElapsed(c.inicio), c.nq);
   return c.pagadas < expected ? 'ATRASADO' : '';
 }
@@ -936,12 +952,13 @@ async function togglePago(cid, qIdx) {
     ts: now.toISOString()
   };
 
+  const alerta = calcAlerta({...c, pagadas, saldo});
   if (USE_FB) {
-    await DB.collection('clientes').doc(cid).set({pagos, pagadas, saldo}, {merge:true});
+    await DB.collection('clientes').doc(cid).set({pagos, pagadas, saldo, alerta}, {merge:true});
     await DB.collection('historial').doc(log.id).set(log);
   } else {
     const i = clientes.findIndex(x=>x.id===cid);
-    clientes[i] = {...clientes[i], pagos, pagadas, saldo};
+    clientes[i] = {...clientes[i], pagos, pagadas, saldo, alerta};
     historial.unshift(log);
     saveLocal();
   }
@@ -1121,7 +1138,7 @@ function renderDash() {
 function renderC(list) {
   const data = list || clientes;
   const tb = document.getElementById('tb-c');
-  if (!data.length) { tb.innerHTML='<tr><td colspan="11" style="text-align:center;padding:28px;color:var(--muted)">Sin acreditados</td></tr>'; return; }
+  if (!data.length) { tb.innerHTML='<tr><td colspan="12" style="text-align:center;padding:28px;color:var(--muted)">Sin acreditados</td></tr>'; return; }
   tb.innerHTML = data.map((c,i)=>{
     const pct = c.nq ? Math.round((c.pagadas/c.nq)*100) : 0;
     const est = c.saldo===0?'liq':calcAlerta(c)==='ATRASADO'?'at':'ok';
@@ -1129,6 +1146,9 @@ function renderC(list) {
       :est==='at'?'<span class="badge br">⚠ Atrasado</span>'
       :'<span class="badge bg">✓ Al corriente</span>';
     const fv = calcVenc(c.inicio, c.nq);
+    const iniLabel = c.inicio ? new Date(c.inicio+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
+    const elapsed = c.inicio ? qsElapsed(c.inicio) : 0;
+    const iniTitle = c.inicio ? `Inicio: ${c.inicio} | Q esperadas: ${Math.min(elapsed,c.nq)} | Q pagadas: ${c.pagadas}` : 'Sin fecha de inicio';
     return `<tr>
       <td><span style="font-family:'DM Mono',monospace;color:var(--muted)">${String(i+1).padStart(2,'0')}</span></td>
       <td><strong>${esc(c.nombre)}</strong></td>
@@ -1139,6 +1159,7 @@ function renderC(list) {
       <td><div class="pb"><div class="pf ${pct<50?'d':pct<80?'w':''}" style="width:${pct}%"></div></div></td>
       <td><span style="font-family:'DM Mono',monospace;color:${c.saldo>0?'var(--warn)':'var(--accent)'}">$${c.saldo.toLocaleString('es-MX')}</span></td>
       <td>${eb}</td>
+      <td title="${iniTitle}"><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${iniLabel}</span></td>
       <td><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${fv}</span></td>
       <td><div style="display:flex;gap:5px">
         <button class="btn btn-s btn-sm btn-ic" onclick="openEC('${c.id}')" title="Estado de cuenta"><i class="fas fa-file-invoice"></i></button>
@@ -1294,7 +1315,7 @@ function filterH() {
 function renderRep() {
   const cap = clientes.reduce((a,c)=>a+c.monto,0);
   const saldoT = clientes.reduce((a,c)=>a+c.saldo,0);
-  const morosos = clientes.filter(c=>c.alerta==='ATRASADO').length;
+  const morosos = clientes.filter(c=>calcAlerta(c)==='ATRASADO').length;
   document.getElementById('rep-stats').innerHTML = `
     <div class="sc"><div class="si"><i class="fas fa-users"></i></div><div class="sv">${clientes.length}</div><div class="sl">Total Acreditados</div></div>
     <div class="sc w"><div class="si"><i class="fas fa-money-bill"></i></div><div class="sv">$${cap.toLocaleString('es-MX')}</div><div class="sl">Capital Total</div></div>
@@ -1334,7 +1355,7 @@ function renderTF() {
 function doExport() {
   const rows = [['#','Nombre','Monto','Pago Q','Plazo','Q Pagadas','Saldo','Estado'],
     ...clientes.map((c,i)=>[i+1,c.nombre,c.monto,c.pq,c.nq+'Q',c.pagadas,c.saldo,
-      c.saldo===0?'Liquidado':c.alerta||'Al corriente'])];
+      c.saldo===0?'Liquidado':calcAlerta(c)||'Al corriente'])];
   const csv = rows.map(r=>r.join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
@@ -1373,7 +1394,7 @@ function doImportJSON() {
         if (!confirmar) return;
         clientes = payload.clientes;
         historial = Array.isArray(payload.historial) ? payload.historial : [];
-        saveLocal();
+        syncAlertas();
         refresh();
         toast(`${clientes.length} clientes restaurados ✅`, 'ok');
       } catch(err) {
