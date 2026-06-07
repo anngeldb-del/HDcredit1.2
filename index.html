@@ -644,6 +644,7 @@ function startFBSync() {
     // Solo sobreescribir caché local si Firebase devuelve datos reales
     if (datos.length > 0 || clientes.length === 0) {
       clientes = datos;
+      syncAlertas();
       localStorage.setItem('hd_c', JSON.stringify(clientes));
     }
     refresh();
@@ -668,6 +669,16 @@ function goLocal() {
 /* ============================================================
    LOCAL STORAGE
 ============================================================ */
+function syncAlertas() {
+  let changed = false;
+  clientes = clientes.map(c => {
+    const alerta = calcAlerta(c);
+    if (alerta !== (c.alerta || '')) { changed = true; return {...c, alerta}; }
+    return c;
+  });
+  if (changed) saveLocal();
+}
+
 function loadLocal() {
   clientes = JSON.parse(localStorage.getItem('hd_c') || '[]');
   historial = JSON.parse(localStorage.getItem('hd_h') || '[]');
@@ -678,13 +689,13 @@ function loadLocal() {
         const bk = JSON.parse(localStorage.getItem(bkKey) || 'null');
         if (bk && Array.isArray(bk.clientes) && bk.clientes.length) {
           clientes = bk.clientes;
-          saveLocal();
           toast('Datos recuperados del respaldo automático (' + new Date(bk.ts).toLocaleDateString() + ') ✅', 'ok');
           break;
         }
       } catch(e) { /* respaldo corrupto, ignorar */ }
     }
   }
+  syncAlertas();
   refresh();
 }
 
@@ -811,7 +822,7 @@ function qsElapsed(inicio) {
 
 function calcAlerta(c) {
   if (!c || c.saldo === 0 || c.pagadas >= c.nq) return '';
-  if (!c.inicio) return c.alerta || '';
+  if (!c.inicio) return '';
   const expected = Math.min(qsElapsed(c.inicio), c.nq);
   return c.pagadas < expected ? 'ATRASADO' : '';
 }
@@ -1335,7 +1346,7 @@ function renderTF() {
 function doExport() {
   const rows = [['#','Nombre','Monto','Pago Q','Plazo','Q Pagadas','Saldo','Estado'],
     ...clientes.map((c,i)=>[i+1,c.nombre,c.monto,c.pq,c.nq+'Q',c.pagadas,c.saldo,
-      c.saldo===0?'Liquidado':c.alerta||'Al corriente'])];
+      c.saldo===0?'Liquidado':calcAlerta(c)||'Al corriente'])];
   const csv = rows.map(r=>r.join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
@@ -1374,7 +1385,7 @@ function doImportJSON() {
         if (!confirmar) return;
         clientes = payload.clientes;
         historial = Array.isArray(payload.historial) ? payload.historial : [];
-        saveLocal();
+        syncAlertas();
         refresh();
         toast(`${clientes.length} clientes restaurados ✅`, 'ok');
       } catch(err) {
