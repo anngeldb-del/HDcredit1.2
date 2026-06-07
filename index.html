@@ -438,7 +438,7 @@ tbody tr:last-child td{border-bottom:none}
       <div class="ts"><table><thead><tr>
         <th>#</th><th>Nombre</th><th>Monto</th><th>Pago Q</th>
         <th>Plazo</th><th>Q Pagadas</th><th>Progreso</th>
-        <th>Saldo</th><th>Estado</th><th>Vence</th><th>Acciones</th>
+        <th>Saldo</th><th>Estado</th><th>Inicio</th><th>Vence</th><th>Acciones</th>
       </tr></thead><tbody id="tb-c"></tbody></table></div>
     </div>
   </div>
@@ -799,23 +799,28 @@ function curQKey() {
 /* ============================================================
    ATRASADO — cálculo real por fechas
 ============================================================ */
+function nextQBoundary(d) {
+  return d.getDate() === 15
+    ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
+    : new Date(d.getFullYear(), d.getMonth() + 1, 15);
+}
 function qsElapsed(inicio) {
   if (!inicio) return 0;
   const start = new Date(inicio + 'T12:00:00');
   const now   = new Date();
   if (start >= now) return 0;
-  let count = 0;
   let d = new Date(start);
-  // Avanzar al cierre de la quincena actual
-  // < 15 (no <=): el día 15 es inicio de quincena, su cierre es el último del mes
+  // Avanzar al cierre de la quincena de inicio
   d.getDate() < 15
     ? d.setDate(15)
     : (d = new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  // El primer pago vence en la quincena SIGUIENTE a la del inicio
+  // (el cliente tiene una quincena completa de gracia antes del primer cobro)
+  d = nextQBoundary(d);
+  let count = 0;
   while (d < now && count <= 24) {
     count++;
-    d = d.getDate() === 15
-      ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
-      : new Date(d.getFullYear(), d.getMonth() + 1, 15);
+    d = nextQBoundary(d);
   }
   return count;
 }
@@ -1133,7 +1138,7 @@ function renderDash() {
 function renderC(list) {
   const data = list || clientes;
   const tb = document.getElementById('tb-c');
-  if (!data.length) { tb.innerHTML='<tr><td colspan="11" style="text-align:center;padding:28px;color:var(--muted)">Sin acreditados</td></tr>'; return; }
+  if (!data.length) { tb.innerHTML='<tr><td colspan="12" style="text-align:center;padding:28px;color:var(--muted)">Sin acreditados</td></tr>'; return; }
   tb.innerHTML = data.map((c,i)=>{
     const pct = c.nq ? Math.round((c.pagadas/c.nq)*100) : 0;
     const est = c.saldo===0?'liq':calcAlerta(c)==='ATRASADO'?'at':'ok';
@@ -1141,6 +1146,9 @@ function renderC(list) {
       :est==='at'?'<span class="badge br">⚠ Atrasado</span>'
       :'<span class="badge bg">✓ Al corriente</span>';
     const fv = calcVenc(c.inicio, c.nq);
+    const iniLabel = c.inicio ? new Date(c.inicio+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
+    const elapsed = c.inicio ? qsElapsed(c.inicio) : 0;
+    const iniTitle = c.inicio ? `Inicio: ${c.inicio} | Q esperadas: ${Math.min(elapsed,c.nq)} | Q pagadas: ${c.pagadas}` : 'Sin fecha de inicio';
     return `<tr>
       <td><span style="font-family:'DM Mono',monospace;color:var(--muted)">${String(i+1).padStart(2,'0')}</span></td>
       <td><strong>${esc(c.nombre)}</strong></td>
@@ -1151,6 +1159,7 @@ function renderC(list) {
       <td><div class="pb"><div class="pf ${pct<50?'d':pct<80?'w':''}" style="width:${pct}%"></div></div></td>
       <td><span style="font-family:'DM Mono',monospace;color:${c.saldo>0?'var(--warn)':'var(--accent)'}">$${c.saldo.toLocaleString('es-MX')}</span></td>
       <td>${eb}</td>
+      <td title="${iniTitle}"><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${iniLabel}</span></td>
       <td><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${fv}</span></td>
       <td><div style="display:flex;gap:5px">
         <button class="btn btn-s btn-sm btn-ic" onclick="openEC('${c.id}')" title="Estado de cuenta"><i class="fas fa-file-invoice"></i></button>
