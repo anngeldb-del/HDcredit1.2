@@ -583,6 +583,21 @@ tbody tr:last-child td{border-bottom:none}
   </div>
 </div>
 
+<!-- Reporte Personal -->
+<div class="overlay" id="m-reporte">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-hd">
+      <div class="modal-title"><i class="fas fa-clipboard-list" style="color:var(--purple);margin-right:8px"></i>Reporte Personal</div>
+      <button class="btn-x" onclick="cm('m-reporte')"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="rep-body"></div>
+    <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
+      <button class="btn btn-wa" id="rep-wa-btn"><i class="fab fa-whatsapp"></i> Enviar por WhatsApp</button>
+      <button class="btn btn-s" onclick="cm('m-reporte')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
 <!-- Estado de Cuenta -->
 <div class="overlay" id="m-ec">
   <div class="modal" style="max-width:480px">
@@ -1012,6 +1027,142 @@ async function togglePago(cid, qIdx) {
 }
 
 /* ============================================================
+   REPORTE PERSONAL
+============================================================ */
+function openReporte(id) {
+  const c = clientes.find(x => x.id === id); if (!c) return;
+  const rec = calcRecargoPorCliente(c);
+  const elapsed = Math.min(qsElapsed(c.inicio), c.nq);
+  const atrasadas = Math.max(0, elapsed - c.pagadas);
+  const capitalAt = atrasadas * c.pq;
+  const faltantes = c.nq - c.pagadas;
+  const saldo = faltantes * c.pq;
+  const totalCobrar = capitalAt + rec.total;
+  const iniLabel = c.inicio
+    ? new Date(c.inicio + 'T12:00:00').toLocaleDateString('es-MX', {day:'2-digit', month:'long', year:'numeric'})
+    : '—';
+  const estado = c.saldo === 0 ? '✅ Liquidado'
+    : calcAlerta(c) === 'ATRASADO' ? '⚠️ Con atraso'
+    : '🟢 Al corriente';
+
+  const recHtml = rec.periodos.length ? `
+    <div class="ec-card" style="border-color:rgba(255,184,0,.25)">
+      <div class="ec-title" style="color:var(--warn)"><i class="fas fa-clock" style="margin-right:6px"></i>Recargos por Atraso ($50/día por quincena)</div>
+      ${rec.periodos.map(p => `
+        <div class="ec-row">
+          <span class="ec-lbl">Q${p.idx} — ${p.diasAtraso} días de atraso</span>
+          <span class="ec-val" style="color:var(--warn)">+$${p.recargo.toLocaleString('es-MX')}</span>
+        </div>`).join('')}
+      <div class="ec-row" style="padding-top:10px">
+        <span class="ec-lbl" style="font-weight:700">Total recargo</span>
+        <span class="ec-val" style="color:var(--warn)">+$${rec.total.toLocaleString('es-MX')}</span>
+      </div>
+    </div>
+    <div class="ec-card" style="border-color:rgba(0,229,160,.3);background:rgba(0,229,160,.04)">
+      <div class="ec-row">
+        <span class="ec-lbl">Capital atrasado</span>
+        <span class="ec-val" style="color:var(--danger)">$${capitalAt.toLocaleString('es-MX')}</span>
+      </div>
+      <div class="ec-row">
+        <span class="ec-lbl">Recargo acumulado</span>
+        <span class="ec-val" style="color:var(--warn)">+$${rec.total.toLocaleString('es-MX')}</span>
+      </div>
+      <div class="ec-row" style="padding-top:10px">
+        <span class="ec-lbl" style="font-weight:700;font-size:.9rem">TOTAL A LIQUIDAR</span>
+        <span class="ec-val" style="color:var(--accent);font-size:1.05rem;font-weight:800">$${totalCobrar.toLocaleString('es-MX')}</span>
+      </div>
+    </div>` : `
+    <div class="ec-card">
+      <div class="ec-row">
+        <span class="ec-lbl">Saldo pendiente</span>
+        <span class="ec-val" style="color:${saldo > 0 ? 'var(--warn)' : 'var(--accent)'}">$${saldo.toLocaleString('es-MX')}</span>
+      </div>
+    </div>`;
+
+  document.getElementById('rep-body').innerHTML = `
+    <div class="ec-card">
+      <div class="ec-title"><i class="fas fa-user" style="margin-right:6px"></i>Datos del Acreditado</div>
+      <div class="ec-row"><span class="ec-lbl">Nombre</span><span class="ec-val">${esc(c.nombre)}</span></div>
+      ${c.telefono ? `<div class="ec-row"><span class="ec-lbl">Teléfono</span><span class="ec-val" style="font-family:'DM Mono',monospace">${esc(c.telefono)}</span></div>` : ''}
+      ${c.notas ? `<div class="ec-row"><span class="ec-lbl">Notas</span><span class="ec-val" style="font-size:.8rem;white-space:pre-wrap;word-break:break-word">${esc(c.notas)}</span></div>` : ''}
+      <div class="ec-row"><span class="ec-lbl">Estado</span><span class="ec-val">${estado}</span></div>
+    </div>
+    <div class="ec-card">
+      <div class="ec-title"><i class="fas fa-file-invoice-dollar" style="margin-right:6px"></i>Detalles del Préstamo</div>
+      <div class="ec-row"><span class="ec-lbl">Monto prestado</span><span class="ec-val" style="color:var(--accent)">$${c.monto.toLocaleString('es-MX')}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Plazo total</span><span class="ec-val">${c.nq} quincenas</span></div>
+      <div class="ec-row"><span class="ec-lbl">Pago quincenal</span><span class="ec-val">$${c.pq.toLocaleString('es-MX')}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Fecha de inicio</span><span class="ec-val">${iniLabel}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Quincenas pagadas</span><span class="ec-val" style="color:var(--accent)">${c.pagadas} de ${c.nq}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Quincenas restantes</span><span class="ec-val" style="color:${faltantes > 0 ? 'var(--warn)' : 'var(--accent)'}">${faltantes}</span></div>
+      ${atrasadas > 0 ? `<div class="ec-row"><span class="ec-lbl">Quincenas atrasadas</span><span class="ec-val" style="color:var(--danger)">${atrasadas}</span></div>` : ''}
+    </div>
+    ${recHtml}`;
+
+  const waBtn = document.getElementById('rep-wa-btn');
+  if (c.telefono) { waBtn.style.display = 'flex'; waBtn.onclick = () => sendReporte(c); }
+  else waBtn.style.display = 'none';
+  om('m-reporte');
+}
+
+function sendReporte(c) {
+  const rec = calcRecargoPorCliente(c);
+  const elapsed = Math.min(qsElapsed(c.inicio), c.nq);
+  const atrasadas = Math.max(0, elapsed - c.pagadas);
+  const capitalAt = atrasadas * c.pq;
+  const faltantes = c.nq - c.pagadas;
+  const saldo = faltantes * c.pq;
+  const totalCobrar = capitalAt + rec.total;
+  const iniLabel = c.inicio
+    ? new Date(c.inicio + 'T12:00:00').toLocaleDateString('es-MX', {day:'2-digit', month:'long', year:'numeric'})
+    : '—';
+  const estado = c.saldo === 0 ? 'LIQUIDADO ✅'
+    : calcAlerta(c) === 'ATRASADO' ? 'CON ATRASO ⚠️'
+    : 'AL CORRIENTE ✅';
+
+  let recStr = '';
+  if (rec.periodos.length) {
+    recStr += '\n\n⏰ *RECARGOS POR ATRASO ($50/día)*';
+    recStr += rec.periodos.map(p =>
+      `\n• Q${p.idx}: ${p.diasAtraso} días → *$${p.recargo.toLocaleString('es-MX')}*`
+    ).join('');
+    recStr += `\n• Total recargo: *$${rec.total.toLocaleString('es-MX')}*`;
+    recStr += `\n\n💰 *TOTAL A LIQUIDAR*`;
+    recStr += `\n• Capital pendiente: $${capitalAt.toLocaleString('es-MX')}`;
+    recStr += `\n• Recargo acumulado: +$${rec.total.toLocaleString('es-MX')}`;
+    recStr += `\n• *TOTAL: $${totalCobrar.toLocaleString('es-MX')}*`;
+  } else {
+    recStr = `\n\n💰 *Saldo pendiente: $${saldo.toLocaleString('es-MX')}*`;
+  }
+
+  const msg =
+`━━━━━━━━━━━━━━━━━━━━
+📋 *REPORTE PERSONAL*
+*HD Crédit*
+━━━━━━━━━━━━━━━━━━━━
+👤 *${c.nombre}*
+${c.telefono ? `📱 ${c.telefono}` : ''}
+
+📄 *DETALLES DEL PRÉSTAMO*
+• Monto prestado: *$${c.monto.toLocaleString('es-MX')}*
+• Plazo: *${c.nq} quincenas*
+• Pago quincenal: *$${c.pq.toLocaleString('es-MX')}*
+• Fecha de inicio: *${iniLabel}*
+
+📊 *AVANCE DE PAGOS*
+• Pagadas: *${c.pagadas} de ${c.nq}*
+• Restantes: *${faltantes}*${atrasadas > 0 ? `\n• Atrasadas: *${atrasadas}*` : ''}${recStr}
+
+📌 Estado: *${estado}*
+━━━━━━━━━━━━━━━━━━━━
+_Cualquier duda, con gusto te atendemos._
+_¡Gracias por tu confianza! 🙏_`;
+
+  window.open(`https://wa.me/52${c.telefono}?text=${encodeURIComponent(msg)}`, '_blank');
+  toast(`Reporte enviado a ${c.nombre}`, 'wa');
+}
+
+/* ============================================================
    ESTADO DE CUENTA
 ============================================================ */
 function openEC(id) {
@@ -1205,6 +1356,7 @@ function renderC(list) {
       <td title="${iniTitle}"><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${iniLabel}</span></td>
       <td><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${fv}</span></td>
       <td><div style="display:flex;gap:5px">
+        <button class="btn btn-s btn-sm btn-ic" onclick="openReporte('${c.id}')" title="Reporte Personal" style="color:var(--purple)"><i class="fas fa-clipboard-list"></i></button>
         <button class="btn btn-s btn-sm btn-ic" onclick="openEC('${c.id}')" title="Estado de cuenta"><i class="fas fa-file-invoice"></i></button>
         <button class="btn btn-s btn-sm btn-ic" onclick="editC('${c.id}')" title="Editar"><i class="fas fa-edit"></i></button>
         ${c.telefono?`<button class="btn btn-wa btn-sm btn-ic" onclick="waCliente('${c.id}')" title="WhatsApp"><i class="fab fa-whatsapp"></i></button>`:''}
@@ -1526,6 +1678,7 @@ function renderMorosos() {
             <td><span style="font-family:'DM Mono',monospace;color:var(--danger)">$${capitalAt.toLocaleString('es-MX')}</span></td>
             <td><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${firstDueLbl}</span></td>
             <td><div style="display:flex;gap:5px">
+              <button class="btn btn-s btn-sm btn-ic" onclick="openReporte('${c.id}')" title="Reporte Personal" style="color:var(--purple)"><i class="fas fa-clipboard-list"></i></button>
               <button class="btn btn-s btn-sm btn-ic" onclick="openEC('${c.id}')" title="Estado de cuenta"><i class="fas fa-file-invoice"></i></button>
               ${c.telefono ? `<button class="btn btn-wa btn-sm btn-ic" onclick="waCliente('${c.id}')" title="WhatsApp"><i class="fab fa-whatsapp"></i></button>` : ''}
             </div></td>
@@ -1554,6 +1707,7 @@ function renderMorosos() {
             <td><span style="font-family:'DM Mono',monospace;color:var(--danger)">$${capitalAt.toLocaleString('es-MX')}</span></td>
             <td><span style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:700">$${totalCobrar.toLocaleString('es-MX')}</span></td>
             <td><div style="display:flex;gap:5px">
+              <button class="btn btn-s btn-sm btn-ic" onclick="openReporte('${c.id}')" title="Reporte Personal" style="color:var(--purple)"><i class="fas fa-clipboard-list"></i></button>
               <button class="btn btn-s btn-sm btn-ic" onclick="openEC('${c.id}')" title="Estado de cuenta"><i class="fas fa-file-invoice"></i></button>
               ${c.telefono ? `<button class="btn btn-wa btn-sm btn-ic" onclick="waCliente('${c.id}')" title="WhatsApp"><i class="fab fa-whatsapp"></i></button>` : ''}
             </div></td>
@@ -1669,6 +1823,7 @@ window.connectFirebase=connectFirebase; window.goLocal=goLocal;
 window.om=om; window.cm=cm;
 window.initPago=initPago; window.undoLastPago=undoLastPago;
 window.switchMorososTab=switchMorososTab; window.renderMorosos=renderMorosos;
+window.openReporte=openReporte; window.sendReporte=sendReporte;
 
 init();
 </script>
