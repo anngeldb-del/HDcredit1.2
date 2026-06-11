@@ -344,6 +344,7 @@ tbody tr:last-child td{border-bottom:none}
     <div class="ni" onclick="gv('tabla')"><i class="fas fa-table"></i> Tabla de Factores</div>
     <div class="ni" onclick="gv('reportes')"><i class="fas fa-chart-bar"></i> Reportes</div>
     <div class="ni" onclick="doExport()"><i class="fas fa-file-csv"></i> Exportar CSV</div>
+    <div class="ni" onclick="doExportXLSX()"><i class="fas fa-file-excel" style="color:#1d6f42"></i> Exportar Excel</div>
     <div class="ni" onclick="doExportJSON()"><i class="fas fa-download"></i> Respaldo JSON</div>
     <div class="ni" onclick="doImportJSON()"><i class="fas fa-upload"></i> Restaurar JSON</div>
     <div class="ni" onclick="gv('dashboard')"><i class="fas fa-chart-pie"></i> Panel Principal</div>
@@ -1641,6 +1642,58 @@ function doExport() {
   toast('Exportado CSV ✅', 'ok');
 }
 
+function doExportXLSX() {
+  if (typeof XLSX === 'undefined') {
+    toast('Cargando exportador Excel...', 'wrn');
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = _generateXLSX;
+    s.onerror = () => toast('Error al cargar librería Excel', 'err');
+    document.head.appendChild(s);
+  } else {
+    _generateXLSX();
+  }
+}
+
+function _generateXLSX() {
+  if (!clientes.length) { toast('No hay datos para exportar', 'err'); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // Hoja 1: Acreditados
+  const ws1 = XLSX.utils.aoa_to_sheet([
+    ['#','Nombre','Monto','Pago Q','Plazo','Q Pagadas','Q Restantes','Saldo','Estado','Inicio','Teléfono','Notas'],
+    ...clientes.map((c, i) => [
+      i + 1, c.nombre, c.monto, c.pq, c.nq + 'Q',
+      c.pagadas, c.nq - c.pagadas, c.saldo,
+      c.saldo === 0 ? 'Liquidado' : calcAlerta(c) === 'ATRASADO' ? 'Atrasado' : 'Al corriente',
+      c.inicio || '', c.telefono || '', c.notas || ''
+    ])
+  ]);
+  ws1['!cols'] = [
+    {wch:4},{wch:22},{wch:10},{wch:10},{wch:8},
+    {wch:10},{wch:12},{wch:12},{wch:14},{wch:12},{wch:14},{wch:22}
+  ];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Acreditados');
+
+  // Hoja 2: Historial
+  if (historial.length) {
+    const ws2 = XLSX.utils.aoa_to_sheet([
+      ['Acreditado','Monto','Quincena','Fecha','Hora','Tipo'],
+      ...historial.slice(0, 1000).map(h => [
+        h.nombre || '', h.monto || 0, h.qKey || '',
+        h.fecha || '', h.hora || '', h.accion || ''
+      ])
+    ]);
+    ws2['!cols'] = [{wch:22},{wch:10},{wch:14},{wch:14},{wch:12},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Historial');
+  }
+
+  const fname = 'HDCredit_' + new Date().toISOString().split('T')[0] + '.xlsx';
+  XLSX.writeFile(wb, fname);
+  toast('Excel descargado ✅', 'ok');
+}
+
 function doExportJSON() {
   if (!clientes.length) { toast('No hay datos para exportar', 'err'); return; }
   const payload = { clientes, historial, ts: new Date().toISOString(), v: '2.1' };
@@ -1900,7 +1953,7 @@ window.togglePago=togglePago; window.openEC=openEC; window.sendEC=sendEC;
 window.waCliente=waCliente; window.waAll=waAll;
 window.filterC=filterC; window.filterH=filterH;
 window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
-window.doExport=doExport; window.doExportJSON=doExportJSON; window.doImportJSON=doImportJSON;
+window.doExport=doExport; window.doExportXLSX=doExportXLSX; window.doExportJSON=doExportJSON; window.doImportJSON=doImportJSON;
 window.connectFirebase=connectFirebase; window.goLocal=goLocal;
 window.om=om; window.cm=cm;
 window.initPago=initPago; window.undoLastPago=undoLastPago;
