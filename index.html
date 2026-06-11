@@ -1096,8 +1096,9 @@ async function doReverso(cid, qIdx) {
   const c = clientes.find(x => x.id === cid); if (!c) return;
   const pagos = c.pagos || Array(c.nq).fill(false);
   if (!pagos[qIdx]) { toast('Esa quincena ya no está pagada', 'wrn'); return; }
+  _undoing = true;         // evita barra Deshacer y doble toast
   await togglePago(cid, qIdx);
-  toast(`↩️ Quincena ${qIdx + 1} revertida — ${c.nombre}`, 'wrn');
+  _undoing = false;
 }
 
 /* ============================================================
