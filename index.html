@@ -254,6 +254,11 @@ tbody tr:last-child td{border-bottom:none}
 #undo-bar .undo-prog{position:absolute;bottom:0;left:0;height:3px;background:var(--warn);border-radius:99px;animation:shrinkbar 8s linear forwards}
 @keyframes shrinkbar{from{width:100%}to{width:0%}}
 
+/* REVERSO ITEMS */
+.rev-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:8px;cursor:pointer;transition:all var(--trans);background:var(--surface)}
+.rev-item:hover{border-color:var(--accent);background:rgba(0,229,160,.05)}
+.rev-item.rev-sel{border-color:var(--danger);background:rgba(255,69,96,.08)}
+
 /* MOROSOS TABS */
 .tab-bar{display:flex;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto}
 .tab-btn{padding:12px 22px;font-size:.85rem;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;transition:all var(--trans);white-space:nowrap;cursor:pointer;font-family:inherit;background:none;border-left:none;border-right:none;border-top:none}
@@ -339,6 +344,7 @@ tbody tr:last-child td{border-bottom:none}
     <div class="ni" onclick="gv('tabla')"><i class="fas fa-table"></i> Tabla de Factores</div>
     <div class="ni" onclick="gv('reportes')"><i class="fas fa-chart-bar"></i> Reportes</div>
     <div class="ni" onclick="doExport()"><i class="fas fa-file-csv"></i> Exportar CSV</div>
+    <div class="ni" onclick="doExportXLSX()"><i class="fas fa-file-excel" style="color:#1d6f42"></i> Exportar Excel</div>
     <div class="ni" onclick="doExportJSON()"><i class="fas fa-download"></i> Respaldo JSON</div>
     <div class="ni" onclick="doImportJSON()"><i class="fas fa-upload"></i> Restaurar JSON</div>
     <div class="ni" onclick="gv('dashboard')"><i class="fas fa-chart-pie"></i> Panel Principal</div>
@@ -579,6 +585,21 @@ tbody tr:last-child td{border-bottom:none}
     <div style="display:flex;justify-content:flex-end;gap:8px">
       <button class="btn btn-s" onclick="cm('m-confirm')">Cancelar</button>
       <button class="btn btn-d" id="conf-ok"><i class="fas fa-trash"></i> Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Retroceder Pago -->
+<div class="overlay" id="m-reverso">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-hd">
+      <div class="modal-title"><i class="fas fa-undo" style="color:var(--danger);margin-right:8px"></i>Retroceder Pago</div>
+      <button class="btn-x" onclick="cm('m-reverso')"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="rev-body"></div>
+    <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
+      <button class="btn btn-d" id="rev-ok" style="opacity:.45;pointer-events:none"><i class="fas fa-undo"></i> Revertir seleccionada</button>
+      <button class="btn btn-s" onclick="cm('m-reverso')">Cancelar</button>
     </div>
   </div>
 </div>
@@ -1027,6 +1048,60 @@ async function togglePago(cid, qIdx) {
 }
 
 /* ============================================================
+   RETROCEDER PAGO
+============================================================ */
+function openReverso(id) {
+  const c = clientes.find(x => x.id === id); if (!c) return;
+  const pagos = c.pagos || Array(c.nq).fill(false);
+  const pagadas = pagos.map((p, i) => p ? i : -1).filter(i => i >= 0);
+  if (!pagadas.length) { toast('Este acreditado no tiene pagos registrados', 'wrn'); return; }
+
+  const revOk = document.getElementById('rev-ok');
+  revOk.style.opacity = '.45';
+  revOk.style.pointerEvents = 'none';
+
+  document.getElementById('rev-body').innerHTML = `
+    <p style="color:var(--muted);font-size:.84rem;margin-bottom:14px">
+      Selecciona la quincena a revertir de <strong>${esc(c.nombre)}</strong>:
+    </p>
+    ${pagadas.map(i => {
+      const dueDate = getQDueDate(c.inicio, i);
+      const dueLbl = dueDate
+        ? dueDate.toLocaleDateString('es-MX', {day:'2-digit', month:'short', year:'2-digit'})
+        : '—';
+      return `<div class="rev-item" onclick="selReverso('${c.id}',${i},this)">
+        <div>
+          <div style="font-weight:700;font-size:.87rem">Quincena ${i + 1}</div>
+          <div style="font-size:.73rem;color:var(--muted);font-family:'DM Mono',monospace">Vto. ${dueLbl}</div>
+        </div>
+        <span style="font-family:'DM Mono',monospace;color:var(--accent)">$${c.pq.toLocaleString('es-MX')}</span>
+        <i class="fas fa-chevron-right" style="color:var(--muted);font-size:.8rem"></i>
+      </div>`;
+    }).join('')}`;
+
+  om('m-reverso');
+}
+
+function selReverso(cid, qIdx, el) {
+  document.querySelectorAll('#m-reverso .rev-item').forEach(x => x.classList.remove('rev-sel'));
+  el.classList.add('rev-sel');
+  const revOk = document.getElementById('rev-ok');
+  revOk.style.opacity = '1';
+  revOk.style.pointerEvents = 'auto';
+  revOk.onclick = () => doReverso(cid, qIdx);
+}
+
+async function doReverso(cid, qIdx) {
+  cm('m-reverso');
+  const c = clientes.find(x => x.id === cid); if (!c) return;
+  const pagos = c.pagos || Array(c.nq).fill(false);
+  if (!pagos[qIdx]) { toast('Esa quincena ya no está pagada', 'wrn'); return; }
+  _undoing = true;         // evita barra Deshacer y doble toast
+  await togglePago(cid, qIdx);
+  _undoing = false;
+}
+
+/* ============================================================
    REPORTE PERSONAL
 ============================================================ */
 function openReporte(id) {
@@ -1449,10 +1524,17 @@ async function undoLastPago() {
 ============================================================ */
 function renderCL() {
   const qKey = document.getElementById('qsel').value;
-  const activos = clientes.filter(c=>c.saldo>0||c.pagadas<c.nq);
+  // Calcular isPaid por adelantado para poder ordenar
+  const activos = clientes
+    .filter(c => c.saldo > 0 || c.pagadas < c.nq)
+    .map(c => ({...c, _isPaid: historial.some(h => h.clienteId===c.id && h.qKey===qKey && h.accion==='PAGO')}))
+    .sort((a, b) => {
+      if (a._isPaid === b._isPaid) return 0;
+      return a._isPaid ? 1 : -1; // pagados van al final
+    });
   let pagados = 0;
   const html = activos.map((c,i)=>{
-    const isPaid = historial.some(h=>h.clienteId===c.id&&h.qKey===qKey&&h.accion==='PAGO');
+    const isPaid = c._isPaid;
     if(isPaid) pagados++;
     const isLate = calcAlerta(c)==='ATRASADO';
     const cls = isPaid?'ck':isLate?'lt':'u';
@@ -1465,8 +1547,10 @@ function renderCL() {
       </div>
       <div class="cdet">$${c.saldo.toLocaleString('es-MX')}<br><span style="font-size:.68rem;color:var(--muted)">saldo</span></div>
       <div class="camt">$${c.pq.toLocaleString('es-MX')}</div>
-      <div style="display:flex;gap:5px;align-items:center">
+      <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
         <button class="pb2 ${cls}" data-pago="${c.id}_${c.pagadas}" onclick="initPago('${c.id}',${c.pagadas})" title="${isPaid?'Toca 2 veces para revertir':'Toca 2 veces para cobrar'}"><i class="${ico}"></i></button>
+        <button class="pb2 u" onclick="openReporte('${c.id}')" title="Morosos y Recargos" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-clipboard-list" style="color:var(--purple)"></i></button>
+        <button class="pb2 u" onclick="openReverso('${c.id}')" title="Retroceder pago" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-undo" style="color:var(--danger)"></i></button>
         <button class="pb2 u" onclick="openEC('${c.id}')" title="Estado de cuenta" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-file-invoice" style="color:var(--info)"></i></button>
         ${c.telefono?`<button class="pb2 u" onclick="waCliente('${c.id}')" title="WhatsApp" style="width:30px;height:30px;font-size:.72rem"><i class="fab fa-whatsapp" style="color:#25d366"></i></button>`:''}
       </div>
@@ -1557,6 +1641,58 @@ function doExport() {
   a.download = 'HDCredit_' + new Date().toISOString().split('T')[0] + '.csv';
   a.click();
   toast('Exportado CSV ✅', 'ok');
+}
+
+function doExportXLSX() {
+  if (typeof XLSX === 'undefined') {
+    toast('Cargando exportador Excel...', 'wrn');
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = _generateXLSX;
+    s.onerror = () => toast('Error al cargar librería Excel', 'err');
+    document.head.appendChild(s);
+  } else {
+    _generateXLSX();
+  }
+}
+
+function _generateXLSX() {
+  if (!clientes.length) { toast('No hay datos para exportar', 'err'); return; }
+
+  const wb = XLSX.utils.book_new();
+
+  // Hoja 1: Acreditados
+  const ws1 = XLSX.utils.aoa_to_sheet([
+    ['#','Nombre','Monto','Pago Q','Plazo','Q Pagadas','Q Restantes','Saldo','Estado','Inicio','Teléfono','Notas'],
+    ...clientes.map((c, i) => [
+      i + 1, c.nombre, c.monto, c.pq, c.nq + 'Q',
+      c.pagadas, c.nq - c.pagadas, c.saldo,
+      c.saldo === 0 ? 'Liquidado' : calcAlerta(c) === 'ATRASADO' ? 'Atrasado' : 'Al corriente',
+      c.inicio || '', c.telefono || '', c.notas || ''
+    ])
+  ]);
+  ws1['!cols'] = [
+    {wch:4},{wch:22},{wch:10},{wch:10},{wch:8},
+    {wch:10},{wch:12},{wch:12},{wch:14},{wch:12},{wch:14},{wch:22}
+  ];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Acreditados');
+
+  // Hoja 2: Historial
+  if (historial.length) {
+    const ws2 = XLSX.utils.aoa_to_sheet([
+      ['Acreditado','Monto','Quincena','Fecha','Hora','Tipo'],
+      ...historial.slice(0, 1000).map(h => [
+        h.nombre || '', h.monto || 0, h.qKey || '',
+        h.fecha || '', h.hora || '', h.accion || ''
+      ])
+    ]);
+    ws2['!cols'] = [{wch:22},{wch:10},{wch:14},{wch:14},{wch:12},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Historial');
+  }
+
+  const fname = 'HDCredit_' + new Date().toISOString().split('T')[0] + '.xlsx';
+  XLSX.writeFile(wb, fname);
+  toast('Excel descargado ✅', 'ok');
 }
 
 function doExportJSON() {
@@ -1818,12 +1954,13 @@ window.togglePago=togglePago; window.openEC=openEC; window.sendEC=sendEC;
 window.waCliente=waCliente; window.waAll=waAll;
 window.filterC=filterC; window.filterH=filterH;
 window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
-window.doExport=doExport; window.doExportJSON=doExportJSON; window.doImportJSON=doImportJSON;
+window.doExport=doExport; window.doExportXLSX=doExportXLSX; window.doExportJSON=doExportJSON; window.doImportJSON=doImportJSON;
 window.connectFirebase=connectFirebase; window.goLocal=goLocal;
 window.om=om; window.cm=cm;
 window.initPago=initPago; window.undoLastPago=undoLastPago;
 window.switchMorososTab=switchMorososTab; window.renderMorosos=renderMorosos;
 window.openReporte=openReporte; window.sendReporte=sendReporte;
+window.openReverso=openReverso; window.selReverso=selReverso; window.doReverso=doReverso;
 
 init();
 </script>
