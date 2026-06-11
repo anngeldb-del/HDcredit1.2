@@ -1255,6 +1255,11 @@ async function undoLastPago() {
 function renderCL() {
   const qKey = document.getElementById('qsel').value;
   const activos = clientes.filter(c=>c.saldo>0||c.pagadas<c.nq);
+  activos.sort((a,b) => {
+    const ap = historial.some(h=>h.clienteId===a.id&&h.qKey===qKey&&h.accion==='PAGO') ? 1 : 0;
+    const bp = historial.some(h=>h.clienteId===b.id&&h.qKey===qKey&&h.accion==='PAGO') ? 1 : 0;
+    return ap - bp;
+  });
   let pagados = 0;
   const html = activos.map((c,i)=>{
     const isPaid = historial.some(h=>h.clienteId===c.id&&h.qKey===qKey&&h.accion==='PAGO');
