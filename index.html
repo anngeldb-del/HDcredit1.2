@@ -190,7 +190,7 @@ tbody tr:last-child td{border-bottom:none}
 .ci{display:grid;grid-template-columns:40px 1fr auto auto auto;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--border);transition:background var(--trans)}
 .ci:last-child{border-bottom:none}
 .ci:hover{background:rgba(255,255,255,.02)}
-.ci.paid{background:rgba(0,229,160,.07);border-left:3px solid var(--accent)}.ci.paid .cname{color:var(--accent)}
+.ci.paid{background:rgba(0,229,160,.07);box-shadow:inset 3px 0 0 var(--accent)}.ci.paid .cname{color:var(--accent)}
 .cn{font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace;text-align:center}
 .cname{font-weight:700;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .camt{font-family:'DM Mono',monospace;font-size:.84rem;color:var(--accent);text-align:right}
@@ -692,9 +692,11 @@ function connectFirebase() {
 function loadFirebaseSDK(cfg) {
   const s1 = document.createElement('script');
   s1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+  s1.onerror = () => { toast('No se pudo cargar Firebase SDK. Usando modo local.', 'err'); goLocal(); };
   s1.onload = () => {
     const s2 = document.createElement('script');
     s2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
+    s2.onerror = () => { toast('No se pudo cargar Firebase SDK. Usando modo local.', 'err'); goLocal(); };
     s2.onload = () => initFB(cfg);
     document.head.appendChild(s2);
   };
@@ -736,6 +738,8 @@ function startFBSync() {
       localStorage.setItem('hd_h', JSON.stringify(historial));
     }
     renderH();
+    renderCL();
+    renderDash();
   });
 }
 
@@ -969,7 +973,7 @@ async function saveC() {
   const monto = parseInt(document.getElementById('f-monto').value)||0;
   const nq = parseInt(document.getElementById('f-plazo').value)||0;
   const inicio = document.getElementById('f-ini').value;
-  const pagadas = parseInt(document.getElementById('f-pag').value)||0;
+  const pagadas = Math.min(parseInt(document.getElementById('f-pag').value)||0, nq);
   const telefono = document.getElementById('f-tel').value.replace(/\D/g,'').slice(0,10);
   const notas = document.getElementById('f-notas').value.trim();
   const eid = document.getElementById('eid').value;
@@ -1247,11 +1251,15 @@ function openEC(id) {
   const faltantes = c.nq - c.pagadas;
   const saldo = faltantes * c.pq;
 
-  // Timeline de quincenas
-  const timeline = Array(c.nq).fill(0).map((_,i) => {
-    if (i < c.pagadas) return `<div class="ec-q ck" title="Quincena ${i+1} pagada">${i+1}</div>`;
-    if (i === c.pagadas) return `<div class="ec-q nx" title="Próxima quincena">${i+1}</div>`;
-    return `<div class="ec-q pd" title="Quincena ${i+1} pendiente">${i+1}</div>`;
+  // Timeline de quincenas — usa array real de pagos y marca vencidas en rojo
+  const pagosArr = (c.pagos || Array(c.nq).fill(false)).slice(0, c.nq);
+  const elapsedEC = Math.min(qsElapsed(c.inicio), c.nq);
+  const nextUnpaid = pagosArr.findIndex(p => !p);
+  const timeline = pagosArr.map((paid, i) => {
+    if (paid) return `<div class="ec-q ck" title="Q${i+1} pagada">${i+1}</div>`;
+    if (i < elapsedEC) return `<div class="ec-q" style="background:rgba(255,69,96,.15);border:1px solid var(--danger);color:var(--danger)" title="Q${i+1} vencida">${i+1}</div>`;
+    if (i === nextUnpaid) return `<div class="ec-q nx" title="Q${i+1} próxima">${i+1}</div>`;
+    return `<div class="ec-q pd" title="Q${i+1} pendiente">${i+1}</div>`;
   }).join('');
 
   const estado = c.saldo===0 ? '✅ Liquidado'
@@ -1354,9 +1362,9 @@ function renderDash() {
   const saldoTotal = clientes.reduce((a,c)=>a+c.saldo,0);
   const qCobro = activos.reduce((a,c)=>a+c.pq,0);
   const qKey = curQKey();
-  const cobrado = historial
-    .filter(h=>h.qKey===qKey&&h.accion==='PAGO')
-    .reduce((a,h)=>a+(h.monto||0),0);
+  const cobrado = Math.max(0, historial
+    .filter(h=>h.qKey===qKey)
+    .reduce((a,h)=>h.accion==='PAGO' ? a+(h.monto||0) : h.accion==='REVERSO' ? a-(h.monto||0) : a, 0));
 
   set('s-total', clientes.length);
   set('s-capital', '$'+capital.toLocaleString('es-MX'));
@@ -1393,7 +1401,7 @@ function renderDash() {
 
   // Mini chart
   const qs = getQuincenas(6);
-  const vals = qs.map(q => historial.filter(h=>h.qKey===q.key&&h.accion==='PAGO').reduce((a,h)=>a+(h.monto||0),0));
+  const vals = qs.map(q => Math.max(0, historial.filter(h=>h.qKey===q.key).reduce((a,h)=>h.accion==='PAGO' ? a+(h.monto||0) : h.accion==='REVERSO' ? a-(h.monto||0) : a, 0)));
   const mx = Math.max(...vals, 1);
   document.getElementById('d-chart').innerHTML = qs.map((q,i)=>`
     <div class="bc">
@@ -1636,7 +1644,7 @@ function doExport() {
   const rows = [['#','Nombre','Monto','Pago Q','Plazo','Q Pagadas','Saldo','Estado'],
     ...clientes.map((c,i)=>[i+1,c.nombre,c.monto,c.pq,c.nq+'Q',c.pagadas,c.saldo,
       c.saldo===0?'Liquidado':calcAlerta(c)||'Al corriente'])];
-  const csv = rows.map(r=>r.join(',')).join('\n');
+  const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
   a.download = 'HDCredit_' + new Date().toISOString().split('T')[0] + '.csv';
@@ -1728,6 +1736,7 @@ function doImportJSON() {
         clientes = payload.clientes;
         historial = Array.isArray(payload.historial) ? payload.historial : [];
         syncAlertas();
+        saveLocal();
         refresh();
         toast(`${clientes.length} clientes restaurados ✅`, 'ok');
       } catch(err) {
@@ -1882,6 +1891,7 @@ function gv(name){
     document.getElementById('sidebar').classList.remove('open');
     document.getElementById('sbov').classList.remove('open');
   }
+  if(name==='dashboard') renderDash();
   if(name==='checklist') renderCL();
   if(name==='historial') renderH();
   if(name==='reportes') renderRep();
