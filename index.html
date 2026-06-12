@@ -190,7 +190,7 @@ tbody tr:last-child td{border-bottom:none}
 .ci{display:grid;grid-template-columns:40px 1fr auto auto auto;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--border);transition:background var(--trans)}
 .ci:last-child{border-bottom:none}
 .ci:hover{background:rgba(255,255,255,.02)}
-.ci.paid{opacity:.65}
+.ci.paid{background:rgba(0,229,160,.07);border-left:3px solid var(--accent)}.ci.paid .cname{color:var(--accent)}
 .cn{font-size:.7rem;color:var(--muted);font-family:'DM Mono',monospace;text-align:center}
 .cname{font-weight:700;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .camt{font-family:'DM Mono',monospace;font-size:.84rem;color:var(--accent);text-align:right}
@@ -279,6 +279,7 @@ tbody tr:last-child td{border-bottom:none}
   .fgrid{grid-template-columns:1fr}
   .ci{grid-template-columns:32px 1fr auto}
   .cdet{display:none}
+  .ci > div:last-child{grid-column:1/-1;justify-content:flex-start;padding-top:2px}
 }
 @media(max-width:480px){
   .sg{grid-template-columns:1fr 1fr}
@@ -1543,12 +1544,14 @@ function renderCL() {
       <div class="cn">${String(i+1).padStart(2,'0')}</div>
       <div>
         <div class="cname">${esc(c.nombre)}</div>
-        <div style="font-size:.7rem;color:var(--muted);margin-top:2px">${c.pagadas}/${c.nq}Q · ${c.nq-c.pagadas} restantes</div>
+        <div style="font-size:.7rem;margin-top:2px">${isPaid?'<span style="color:var(--accent);font-weight:700">✓ Cobrado esta quincena</span>':`<span style="color:var(--muted)">${c.pagadas}/${c.nq}Q · ${c.nq-c.pagadas} restantes</span>`}</div>
       </div>
       <div class="cdet">$${c.saldo.toLocaleString('es-MX')}<br><span style="font-size:.68rem;color:var(--muted)">saldo</span></div>
       <div class="camt">$${c.pq.toLocaleString('es-MX')}</div>
       <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-        <button class="pb2 ${cls}" data-pago="${c.id}_${c.pagadas}" onclick="initPago('${c.id}',${c.pagadas})" title="${isPaid?'Toca 2 veces para revertir':'Toca 2 veces para cobrar'}"><i class="${ico}"></i></button>
+        ${isPaid
+          ?`<button class="pb2 ck" onclick="openReverso('${c.id}')" title="Cobrado · clic para retroceder pago"><i class="fas fa-check"></i></button>`
+          :`<button class="pb2 ${cls}" data-pago="${c.id}_${c.pagadas}" onclick="initPago('${c.id}',${c.pagadas})" title="Toca 2 veces para cobrar"><i class="${ico}"></i></button>`}
         <button class="pb2 u" onclick="openReporte('${c.id}')" title="Morosos y Recargos" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-clipboard-list" style="color:var(--purple)"></i></button>
         <button class="pb2 u" onclick="openReverso('${c.id}')" title="Retroceder pago" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-undo" style="color:var(--danger)"></i></button>
         <button class="pb2 u" onclick="openEC('${c.id}')" title="Estado de cuenta" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-file-invoice" style="color:var(--info)"></i></button>
