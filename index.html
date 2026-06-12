@@ -662,7 +662,7 @@ const TF = {
 ============================================================ */
 let DB = null, USE_FB = false;
 let clientes = [], historial = [];
-let _pendingPago = {}, _lastPago = null, _undoing = false;
+let _pendingPago = {}, _pendingOrigHtml = {}, _lastPago = null, _undoing = false;
 
 /* ============================================================
    FIREBASE (lazy load)
@@ -845,7 +845,7 @@ function seedData() {
     nombre: r.n, monto: r.m, pq: r.pq, nq: r.nq,
     inicio: xlDate(r.ini), pagadas: r.pg, saldo: r.s,
     alerta: r.a, telefono: '', notas: '',
-    pagos: Array(12).fill(false).map((_,j) => j < r.pg),
+    pagos: Array(r.nq).fill(false).map((_,j) => j < r.pg),
     createdAt: new Date().toISOString()
   }));
   saveLocal();
@@ -1456,11 +1456,8 @@ function filterC() {
 
 function calcVenc(inicio, nq) {
   if (!inicio||!nq) return '—';
-  let d = new Date(inicio);
-  for (let i=0;i<nq;i++) {
-    if (d.getDate()===15) d = new Date(d.getFullYear(),d.getMonth(),new Date(d.getFullYear(),d.getMonth()+1,0).getDate());
-    else { d.setMonth(d.getMonth()+1); d.setDate(15); }
-  }
+  const d = getQDueDate(inicio, nq - 1);
+  if (!d) return '—';
   return d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'});
 }
 
@@ -1474,22 +1471,23 @@ async function initPago(cid, qIdx) {
     // segundo toque — confirmar
     clearTimeout(_pendingPago[key]);
     delete _pendingPago[key];
-    if (btn) { btn.classList.remove('confirming'); btn.innerHTML = btn._origHtml || ''; }
+    if (btn) { btn.classList.remove('confirming'); btn.innerHTML = _pendingOrigHtml[key] || ''; }
+    delete _pendingOrigHtml[key];
     await togglePago(cid, qIdx);
   } else {
     // primer toque — pedir confirmación visual
     if (!btn) return;
-    btn._origHtml = btn.innerHTML;
+    _pendingOrigHtml[key] = btn.innerHTML;
     btn.classList.add('confirming');
     btn.innerHTML = '<i class="fas fa-question"></i>';
     _pendingPago[key] = setTimeout(() => {
       delete _pendingPago[key];
-      // Usar referencia fresca al botón por si el DOM se re-renderizó
       const freshBtn = document.querySelector(`[data-pago="${key}"]`);
       if (freshBtn) {
         freshBtn.classList.remove('confirming');
-        freshBtn.innerHTML = btn._origHtml || '';
+        freshBtn.innerHTML = _pendingOrigHtml[key] || '';
       }
+      delete _pendingOrigHtml[key];
     }, 2500);
   }
 }
@@ -1726,6 +1724,7 @@ function doImportJSON() {
           `¿Importar ${payload.clientes.length} clientes del respaldo del ${new Date(payload.ts).toLocaleDateString()}?\n\nEsto reemplazará los datos actuales.`
         );
         if (!confirmar) return;
+        autoBackup(); // guardar estado actual ANTES de sobrescribir
         clientes = payload.clientes;
         historial = Array.isArray(payload.historial) ? payload.historial : [];
         syncAlertas();
