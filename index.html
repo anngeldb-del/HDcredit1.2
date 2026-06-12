@@ -184,7 +184,7 @@ tbody tr:last-child td{border-bottom:none}
 .pf.d{background:var(--danger)}
 
 /* CHECKLIST */
-.ch-hd{display:flex;align-items:center;gap:12px;padding:18px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.ch-hd{display:flex;align-items:center;gap:12px;padding:18px;border-bottom:1px solid var(--border);flex-wrap:wrap;position:sticky;top:0;z-index:50;background:var(--card)}
 .qsel{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 13px}
 .qsel select{background:none;border:none;color:var(--text);font-size:.9rem;font-weight:700;font-family:'Syne',sans-serif}
 .ci{display:grid;grid-template-columns:40px 1fr auto auto auto;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid var(--border);transition:background var(--trans)}
@@ -898,7 +898,7 @@ function qsElapsed(inicio) {
   // (el cliente tiene una quincena completa de gracia antes del primer cobro)
   d = nextQBoundary(d);
   let count = 0;
-  while (d < now && count <= 24) {
+  while (d < now && count < 36) {
     count++;
     d = nextQBoundary(d);
   }
@@ -1528,7 +1528,7 @@ function renderCL() {
   // Calcular isPaid por adelantado para poder ordenar
   const activos = clientes
     .filter(c => c.saldo > 0 || c.pagadas < c.nq)
-    .map(c => ({...c, _isPaid: historial.some(h => h.clienteId===c.id && h.qKey===qKey && h.accion==='PAGO')}))
+    .map(c => ({...c, _isPaid: (() => { const h = historial.find(e => e.clienteId===c.id && e.qKey===qKey); return h?.accion === 'PAGO'; })() }))
     .sort((a, b) => {
       if (a._isPaid === b._isPaid) return 0;
       return a._isPaid ? 1 : -1; // pagados van al final
