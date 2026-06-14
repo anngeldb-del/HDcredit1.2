@@ -12,10 +12,6 @@
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
-      // Limpiar caches viejos antes de registrar
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-      // Registrar SW actualizado
       const reg = await navigator.serviceWorker.register('sw.js');
       // Si hay nueva versión esperando, activarla inmediatamente
       reg.addEventListener('updatefound', () => {
@@ -300,7 +296,7 @@ tbody tr:last-child td{border-bottom:none}
 <div id="toasts"></div>
 
 <!-- FIREBASE CONFIG -->
-<div id="fb-cfg" style="display:flex">
+<div id="fb-cfg" style="display:none">
   <div class="cfg-box">
     <div class="cfg-logo">HD Crédit</div>
     <div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-bottom:12px">CONFIGURACIÓN INICIAL</div>
@@ -983,7 +979,20 @@ async function saveC() {
 
   const pq = TF[monto][nq];
   const saldo = Math.max(0, (nq - pagadas) * pq);
-  const pagos = Array(nq).fill(false).map((_,i) => i < pagadas);
+  // Al editar: preservar el array pagos si el plazo y las quincenas pagadas no cambiaron
+  // (evita destruir el patrón de pagos individuales generado por reversiones)
+  let pagos;
+  if (eid) {
+    const existing = clientes.find(x=>x.id===eid);
+    if (existing && existing.nq === nq && existing.pagadas === pagadas && Array.isArray(existing.pagos)) {
+      pagos = existing.pagos.slice(0, nq);
+      while (pagos.length < nq) pagos.push(false);
+    } else {
+      pagos = Array(nq).fill(false).map((_,i) => i < pagadas);
+    }
+  } else {
+    pagos = Array(nq).fill(false).map((_,i) => i < pagadas);
+  }
   const data = { nombre, monto, pq, nq, inicio, pagadas, saldo, pagos, telefono, notas,
     alerta: calcAlerta({saldo, pagadas, nq, inicio}), updatedAt: new Date().toISOString() };
 
@@ -1546,6 +1555,10 @@ function renderCL() {
     const isLate = calcAlerta(c)==='ATRASADO';
     const cls = isPaid?'ck':isLate?'lt':'u';
     const ico = isPaid?'fas fa-check':isLate?'fas fa-exclamation':'far fa-circle';
+    // Usar la primera quincena sin pagar (no necesariamente c.pagadas, que puede apuntar a una ya pagada tras un reverso)
+    const _pagosArr = c.pagos || Array(c.nq).fill(false).map((_,j) => j < c.pagadas);
+    const _nextIdx = _pagosArr.findIndex(p => !p);
+    const nextQIdx = _nextIdx >= 0 ? _nextIdx : c.pagadas;
     return `<div class="ci${isPaid?' paid':''}">
       <div class="cn">${String(i+1).padStart(2,'0')}</div>
       <div>
@@ -1557,7 +1570,7 @@ function renderCL() {
       <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
         ${isPaid
           ?`<button class="pb2 ck" onclick="openReverso('${c.id}')" title="Cobrado · clic para retroceder pago"><i class="fas fa-check"></i></button>`
-          :`<button class="pb2 ${cls}" data-pago="${c.id}_${c.pagadas}" onclick="initPago('${c.id}',${c.pagadas})" title="Toca 2 veces para cobrar"><i class="${ico}"></i></button>`}
+          :`<button class="pb2 ${cls}" data-pago="${c.id}_${nextQIdx}" onclick="initPago('${c.id}',${nextQIdx})" title="Toca 2 veces para cobrar"><i class="${ico}"></i></button>`}
         <button class="pb2 u" onclick="openReporte('${c.id}')" title="Morosos y Recargos" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-clipboard-list" style="color:var(--purple)"></i></button>
         <button class="pb2 u" onclick="openReverso('${c.id}')" title="Retroceder pago" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-undo" style="color:var(--danger)"></i></button>
         <button class="pb2 u" onclick="openEC('${c.id}')" title="Estado de cuenta" style="width:30px;height:30px;font-size:.72rem"><i class="fas fa-file-invoice" style="color:var(--info)"></i></button>
@@ -1735,6 +1748,8 @@ function doImportJSON() {
         autoBackup(); // guardar estado actual ANTES de sobrescribir
         clientes = payload.clientes;
         historial = Array.isArray(payload.historial) ? payload.historial : [];
+        // Garantizar orden más reciente primero para que renderCL() identifique correctamente isPaid
+        historial.sort((a, b) => new Date(b.ts) - new Date(a.ts));
         syncAlertas();
         saveLocal();
         refresh();
