@@ -277,6 +277,9 @@ tbody tr:last-child td{border-bottom:none}
   .ci{grid-template-columns:32px 1fr auto}
   .cdet{display:none}
   .ci > div:last-child{grid-column:1/-1;justify-content:flex-start;padding-top:2px}
+  /* Touch targets mínimos WCAG 44×44px en móvil */
+  .pb2{width:40px;height:40px;font-size:.9rem}
+  .btn-sm{padding:8px 13px}
 }
 @media(max-width:480px){
   .sg{grid-template-columns:1fr 1fr}
@@ -305,7 +308,7 @@ tbody tr:last-child td{border-bottom:none}
     <div class="cfg-steps">
       <div class="cstep"><div class="csn">1</div><div>Ve a <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> y crea un proyecto (sin Google Analytics).</div></div>
       <div class="cstep"><div class="csn">2</div><div>En el proyecto → <strong>Firestore Database</strong> → Crear base de datos → Modo producción.</div></div>
-      <div class="cstep"><div class="csn">3</div><div>Firestore → pestaña <strong>Reglas</strong> → reemplaza todo con:<br><code style="color:var(--accent);font-size:.75rem">rules_version='2'; service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if true; } } }</code></div></div>
+      <div class="cstep"><div class="csn">3</div><div>Firestore → pestaña <strong>Reglas</strong> → reemplaza todo con:<br><code style="color:var(--accent);font-size:.75rem">rules_version='2'; service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if true; } } }</code><br><span style="color:var(--warn);font-size:.73rem">⚠️ Solo para uso personal en dispositivo propio. Para producción o uso compartido, configura autenticación Firebase antes de activar estas reglas.</span></div></div>
       <div class="cstep"><div class="csn">4</div><div>Configuración del proyecto ⚙️ → <strong>Agregar app</strong> → Web (&lt;/&gt;) → copia el objeto <code style="color:var(--accent)">firebaseConfig</code>.</div></div>
       <div class="cstep"><div class="csn">5</div><div>Pega el JSON abajo y toca <strong>Conectar Firebase</strong>.</div></div>
     </div>
@@ -540,9 +543,9 @@ tbody tr:last-child td{border-bottom:none}
 <!-- ═══════════ MODALS ═══════════ -->
 
 <!-- Nuevo / Editar -->
-<div class="overlay" id="m-cliente">
+<div class="overlay" id="m-cliente" role="dialog" aria-modal="true" aria-labelledby="m-title">
   <div class="modal">
-    <div class="modal-hd"><div class="modal-title" id="m-title">Nuevo Acreditado</div><button class="btn-x" onclick="cm('m-cliente')"><i class="fas fa-times"></i></button></div>
+    <div class="modal-hd"><div class="modal-title" id="m-title">Nuevo Acreditado</div><button class="btn-x" onclick="cm('m-cliente')" aria-label="Cerrar"><i class="fas fa-times"></i></button></div>
     <input type="hidden" id="eid">
     <div class="fgrid">
       <div class="fg full"><label>Nombre Completo *</label><input class="fc" id="f-nom" placeholder="Nombre del acreditado"></div>
@@ -576,9 +579,9 @@ tbody tr:last-child td{border-bottom:none}
 </div>
 
 <!-- Confirmar Eliminar -->
-<div class="overlay" id="m-confirm">
+<div class="overlay" id="m-confirm" role="dialog" aria-modal="true" aria-label="Confirmar eliminación">
   <div class="modal" style="max-width:360px">
-    <div class="modal-hd"><div class="modal-title">Confirmar eliminación</div><button class="btn-x" onclick="cm('m-confirm')"><i class="fas fa-times"></i></button></div>
+    <div class="modal-hd"><div class="modal-title">Confirmar eliminación</div><button class="btn-x" onclick="cm('m-confirm')" aria-label="Cerrar"><i class="fas fa-times"></i></button></div>
     <p style="color:var(--muted);font-size:.87rem;margin-bottom:20px" id="conf-msg">¿Eliminar este acreditado?</p>
     <div style="display:flex;justify-content:flex-end;gap:8px">
       <button class="btn btn-s" onclick="cm('m-confirm')">Cancelar</button>
@@ -588,11 +591,11 @@ tbody tr:last-child td{border-bottom:none}
 </div>
 
 <!-- Retroceder Pago -->
-<div class="overlay" id="m-reverso">
+<div class="overlay" id="m-reverso" role="dialog" aria-modal="true" aria-label="Retroceder pago">
   <div class="modal" style="max-width:400px">
     <div class="modal-hd">
       <div class="modal-title"><i class="fas fa-undo" style="color:var(--danger);margin-right:8px"></i>Retroceder Pago</div>
-      <button class="btn-x" onclick="cm('m-reverso')"><i class="fas fa-times"></i></button>
+      <button class="btn-x" onclick="cm('m-reverso')" aria-label="Cerrar"><i class="fas fa-times"></i></button>
     </div>
     <div id="rev-body"></div>
     <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
@@ -603,11 +606,11 @@ tbody tr:last-child td{border-bottom:none}
 </div>
 
 <!-- Reporte Personal -->
-<div class="overlay" id="m-reporte">
+<div class="overlay" id="m-reporte" role="dialog" aria-modal="true" aria-label="Reporte personal">
   <div class="modal" style="max-width:500px">
     <div class="modal-hd">
       <div class="modal-title"><i class="fas fa-clipboard-list" style="color:var(--purple);margin-right:8px"></i>Reporte Personal</div>
-      <button class="btn-x" onclick="cm('m-reporte')"><i class="fas fa-times"></i></button>
+      <button class="btn-x" onclick="cm('m-reporte')" aria-label="Cerrar"><i class="fas fa-times"></i></button>
     </div>
     <div id="rep-body"></div>
     <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
@@ -618,11 +621,11 @@ tbody tr:last-child td{border-bottom:none}
 </div>
 
 <!-- Estado de Cuenta -->
-<div class="overlay" id="m-ec">
+<div class="overlay" id="m-ec" role="dialog" aria-modal="true" aria-label="Estado de cuenta">
   <div class="modal" style="max-width:480px">
     <div class="modal-hd">
       <div class="modal-title">Estado de Cuenta</div>
-      <button class="btn-x" onclick="cm('m-ec')"><i class="fas fa-times"></i></button>
+      <button class="btn-x" onclick="cm('m-ec')" aria-label="Cerrar"><i class="fas fa-times"></i></button>
     </div>
     <div id="ec-body"></div>
     <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
@@ -660,6 +663,7 @@ const TF = {
 let DB = null, USE_FB = false;
 let clientes = [], historial = [];
 let _pendingPago = {}, _pendingOrigHtml = {}, _lastPago = null, _undoing = false;
+let _unsubClientes = null, _unsubHistorial = null;
 
 /* ============================================================
    FIREBASE (lazy load)
@@ -718,9 +722,11 @@ function initFB(cfg) {
 }
 
 function startFBSync() {
-  DB.collection('clientes').orderBy('createdAt').onSnapshot(snap => {
+  // Cancelar listeners anteriores para evitar duplicados si se reconecta
+  if (_unsubClientes) { _unsubClientes(); _unsubClientes = null; }
+  if (_unsubHistorial) { _unsubHistorial(); _unsubHistorial = null; }
+  _unsubClientes = DB.collection('clientes').orderBy('createdAt').onSnapshot(snap => {
     const datos = snap.docs.map(d => ({id: d.id, ...d.data()}));
-    // Solo sobreescribir caché local si Firebase devuelve datos reales
     if (datos.length > 0 || clientes.length === 0) {
       clientes = datos;
       syncAlertas();
@@ -728,7 +734,7 @@ function startFBSync() {
     }
     refresh();
   });
-  DB.collection('historial').orderBy('ts', 'desc').limit(500).onSnapshot(snap => {
+  _unsubHistorial = DB.collection('historial').orderBy('ts', 'desc').limit(500).onSnapshot(snap => {
     const datos = snap.docs.map(d => ({id: d.id, ...d.data()}));
     if (datos.length > 0 || historial.length === 0) {
       historial = datos;
@@ -761,8 +767,10 @@ function syncAlertas() {
 }
 
 function loadLocal() {
-  clientes = JSON.parse(localStorage.getItem('hd_c') || '[]');
-  historial = JSON.parse(localStorage.getItem('hd_h') || '[]');
+  try { clientes = JSON.parse(localStorage.getItem('hd_c') || '[]'); }
+  catch(e) { clientes = []; toast('⚠️ Datos corruptos en almacenamiento local — se inició vacío. Restaura un respaldo JSON.', 'err'); }
+  try { historial = JSON.parse(localStorage.getItem('hd_h') || '[]'); }
+  catch(e) { historial = []; }
   // Si no hay datos, intentar recuperar del respaldo automático antes de rendirnos
   if (!clientes.length) {
     for (const bkKey of ['hd_bk_0', 'hd_bk_1']) {
@@ -781,8 +789,12 @@ function loadLocal() {
 }
 
 function saveLocal() {
-  localStorage.setItem('hd_c', JSON.stringify(clientes));
-  localStorage.setItem('hd_h', JSON.stringify(historial));
+  try {
+    localStorage.setItem('hd_c', JSON.stringify(clientes));
+    localStorage.setItem('hd_h', JSON.stringify(historial));
+  } catch(e) {
+    toast('⚠️ Almacenamiento lleno — exporta un respaldo JSON ahora para no perder datos', 'err');
+  }
 }
 
 /* ============================================================
@@ -1020,8 +1032,22 @@ function confirmDel(id) {
 }
 
 async function delC(id) {
-  if (USE_FB) { await DB.collection('clientes').doc(id).delete(); }
-  else { clientes = clientes.filter(x=>x.id!==id); saveLocal(); refresh(); }
+  if (USE_FB) {
+    await DB.collection('clientes').doc(id).delete();
+    // Limpiar historial huérfano en Firestore
+    try {
+      const snap = await DB.collection('historial').where('clienteId', '==', id).get();
+      if (snap.docs.length) {
+        const batch = DB.batch();
+        snap.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+      }
+    } catch(e) { /* historial ya será invisible sin el cliente */ }
+  } else {
+    clientes = clientes.filter(x=>x.id!==id);
+    historial = historial.filter(h=>h.clienteId!==id);
+    saveLocal(); refresh();
+  }
   cm('m-confirm');
   toast('Acreditado eliminado', 'wrn');
 }
@@ -1112,9 +1138,8 @@ async function doReverso(cid, qIdx) {
   const c = clientes.find(x => x.id === cid); if (!c) return;
   const pagos = c.pagos || Array(c.nq).fill(false);
   if (!pagos[qIdx]) { toast('Esa quincena ya no está pagada', 'wrn'); return; }
-  _undoing = true;         // evita barra Deshacer y doble toast
-  await togglePago(cid, qIdx);
-  _undoing = false;
+  _undoing = true;
+  try { await togglePago(cid, qIdx); } finally { _undoing = false; }
 }
 
 /* ============================================================
@@ -1359,8 +1384,9 @@ function waCliente(id) {
 function waAll() {
   const activos = clientes.filter(c => c.saldo > 0 && c.telefono);
   if (!activos.length) { toast('Sin acreditados con teléfono', 'wrn'); return; }
-  activos.forEach((c, i) => setTimeout(() => waCliente(c.id), i*900));
-  toast(`Enviando a ${activos.length} acreditados`, 'ok');
+  if (!confirm(`¿Enviar recordatorio a ${activos.length} acreditados?\n\nNota: el navegador puede bloquear ventanas emergentes después de la primera. Permite las ventanas emergentes si se solicita.`)) return;
+  activos.forEach((c, i) => setTimeout(() => waCliente(c.id), i * 900));
+  toast(`Iniciando envío a ${activos.length} acreditados — permite ventanas emergentes si se solicita`, 'ok');
 }
 
 /* ============================================================
@@ -1385,9 +1411,10 @@ function renderDash() {
   set('s-cobrado', '$'+cobrado.toLocaleString('es-MX'));
   set('dash-date', new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'}));
 
-  // Badge
+  // Badge sidebar + título dinámico
   const nb = document.getElementById('nb-late');
   morosos.length > 0 ? (nb.textContent=morosos.length, nb.style.display='') : nb.style.display='none';
+  document.title = morosos.length ? `⚠️ ${morosos.length} morosos · HD Crédit` : 'HD Crédit — Control de Pagos';
 
   // Morosos
   const ml = document.getElementById('d-morosos');
@@ -1463,16 +1490,20 @@ function renderC(list) {
   }).join('');
 }
 
+let _filterCTimer;
 function filterC() {
-  const q = document.getElementById('srch-c').value.toLowerCase();
-  const est = document.getElementById('flt-est').value;
-  const plazo = document.getElementById('flt-plazo').value;
-  renderC(clientes.filter(c=>{
-    const e = c.saldo===0?'liquidado':calcAlerta(c)==='ATRASADO'?'atrasado':'al_corriente';
-    return c.nombre.toLowerCase().includes(q)
-      && (!est||e===est)
-      && (!plazo||String(c.nq)===plazo);
-  }));
+  clearTimeout(_filterCTimer);
+  _filterCTimer = setTimeout(() => {
+    const q = document.getElementById('srch-c').value.toLowerCase();
+    const est = document.getElementById('flt-est').value;
+    const plazo = document.getElementById('flt-plazo').value;
+    renderC(clientes.filter(c=>{
+      const e = c.saldo===0?'liquidado':calcAlerta(c)==='ATRASADO'?'atrasado':'al_corriente';
+      return (c.nombre||'').toLowerCase().includes(q)
+        && (!est||e===est)
+        && (!plazo||String(c.nq)===plazo);
+    }));
+  }, 180);
 }
 
 function calcVenc(inicio, nq) {
@@ -1533,8 +1564,7 @@ async function undoLastPago() {
   const bar = document.getElementById('undo-bar');
   if (bar) { clearTimeout(Number(bar.dataset.timer)); bar.remove(); }
   _undoing = true;
-  await togglePago(_lastPago.cid, _lastPago.qIdx);
-  _undoing = false;
+  try { await togglePago(_lastPago.cid, _lastPago.qIdx); } finally { _undoing = false; }
   _lastPago = null;
   toast('↩️ Acción deshecha', 'wrn');
 }
@@ -1601,7 +1631,7 @@ function renderH(list) {
   const data = (list||historial).slice(0,300);
   const tb = document.getElementById('tb-h');
   tb.innerHTML = data.length ? data.map(h=>`<tr>
-    <td><strong>${h.nombre||'—'}</strong></td>
+    <td><strong>${esc(h.nombre||'—')}</strong></td>
     <td><span style="font-family:'DM Mono',monospace;color:var(--accent)">$${(h.monto||0).toLocaleString('es-MX')}</span></td>
     <td><span style="font-family:'DM Mono',monospace;font-size:.76rem">${h.qKey||'—'}</span></td>
     <td>${h.fecha||'—'}</td>
@@ -1611,9 +1641,13 @@ function renderH(list) {
     : '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Sin registros</td></tr>';
 }
 
+let _filterHTimer;
 function filterH() {
-  const q = document.getElementById('srch-h').value.toLowerCase();
-  renderH(historial.filter(h=>(h.nombre||'').toLowerCase().includes(q)));
+  clearTimeout(_filterHTimer);
+  _filterHTimer = setTimeout(() => {
+    const q = document.getElementById('srch-h').value.toLowerCase();
+    renderH(historial.filter(h=>(h.nombre||'').toLowerCase().includes(q)));
+  }, 180);
 }
 
 /* ============================================================
@@ -1747,19 +1781,29 @@ function doImportJSON() {
         if (!payload.clientes || !Array.isArray(payload.clientes) || !payload.clientes.length) {
           toast('Archivo inválido o sin clientes', 'err'); return;
         }
-        const confirmar = confirm(
-          `¿Importar ${payload.clientes.length} clientes del respaldo del ${new Date(payload.ts).toLocaleDateString()}?\n\nEsto reemplazará los datos actuales.`
+        // Validar estructura de cada cliente
+        const validos = payload.clientes.filter(c =>
+          c && typeof c === 'object'
+          && typeof c.nombre === 'string' && c.nombre.trim()
+          && Number.isFinite(c.nq) && c.nq > 0
+          && Number.isFinite(c.monto) && c.monto > 0
+          && Number.isFinite(c.pagadas)
         );
-        if (!confirmar) return;
-        autoBackup(); // guardar estado actual ANTES de sobrescribir
-        clientes = payload.clientes;
+        const omitidos = payload.clientes.length - validos.length;
+        if (!validos.length) { toast('Archivo inválido: sin registros con estructura correcta', 'err'); return; }
+        const tsLabel = payload.ts ? new Date(payload.ts).toLocaleDateString('es-MX') : 'fecha desconocida';
+        const msg = `¿Importar ${validos.length} clientes del respaldo del ${tsLabel}?\n\nEsto reemplazará los datos actuales.`
+          + (omitidos ? `\n\n⚠️ Se omitirán ${omitidos} registros con datos inválidos.` : '');
+        if (!confirm(msg)) return;
+        autoBackup();
+        clientes = validos;
         historial = Array.isArray(payload.historial) ? payload.historial : [];
-        // Garantizar orden más reciente primero para que renderCL() identifique correctamente isPaid
         historial.sort((a, b) => new Date(b.ts) - new Date(a.ts));
         syncAlertas();
         saveLocal();
         refresh();
-        toast(`${clientes.length} clientes restaurados ✅`, 'ok');
+        if (omitidos) toast(`${validos.length} clientes restaurados · ${omitidos} omitidos por datos inválidos`, 'wrn');
+        else toast(`${validos.length} clientes restaurados ✅`, 'ok');
       } catch(err) {
         toast('Error al leer el archivo: ' + err.message, 'err');
       }
@@ -1896,7 +1940,15 @@ function toast(msg,type='ok'){
   el.className='toast '+type;
   const ic=type==='ok'?'fa-check-circle':type==='err'?'fa-times-circle':type==='wa'?'fa-whatsapp':'fa-exclamation-triangle';
   const col=type==='ok'?'var(--accent)':type==='err'?'var(--danger)':type==='wa'?'#25d366':'var(--warn)';
-  el.innerHTML=`<i class="${type==='wa'?'fab':'fas'} ${ic}" style="color:${col}"></i> ${msg}`;
+  // Usar textContent para el mensaje — previene XSS con datos de usuario
+  const icon=document.createElement('i');
+  icon.className=(type==='wa'?'fab':'fas')+' '+ic;
+  icon.style.color=col;
+  const txt=document.createElement('span');
+  txt.textContent=msg;
+  el.appendChild(icon);
+  el.appendChild(document.createTextNode(' '));
+  el.appendChild(txt);
   document.getElementById('toasts').appendChild(el);
   setTimeout(()=>el.remove(),3800);
 }
@@ -1926,11 +1978,13 @@ function toggleSB(){
 
 function refresh(){
   autoBackup();
+  const activeId = document.querySelector('.view.on')?.id;
   renderDash();
   renderC();
   renderCL();
-  renderH();
-  renderRep();
+  // Vistas de solo lectura: render diferido — solo si están activas
+  if (activeId === 'v-historial') renderH();
+  if (activeId === 'v-reportes') renderRep();
   renderMorosos();
 }
 
@@ -1945,6 +1999,26 @@ document.addEventListener('visibilitychange', () => {
     renderMorosos();
   }
 });
+
+/* ============================================================
+   TECLA ESCAPE — cerrar cualquier modal abierto
+============================================================ */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open'));
+  }
+});
+
+/* ============================================================
+   MANEJADOR GLOBAL DE ERRORES — evita fallos silenciosos
+============================================================ */
+window.addEventListener('unhandledrejection', e => {
+  console.error('HD Crédit — promise rejection:', e.reason);
+  if (e.reason?.message) toast('Error inesperado: ' + e.reason.message, 'err');
+});
+window.onerror = (msg, src, line) => {
+  console.error('HD Crédit — JS error:', msg, 'en línea', line);
+};
 
 /* ============================================================
    QUINZENA SELECTOR INIT
