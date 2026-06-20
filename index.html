@@ -1990,6 +1990,7 @@ function refresh(){
 
 /* ============================================================
    VISIBILITYCHANGE — re-evaluar atrasos al volver a la pestaña
+   (cubre el caso donde el día cambia con la app abierta)
 ============================================================ */
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && clientes.length) {
