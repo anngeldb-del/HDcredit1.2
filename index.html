@@ -308,9 +308,10 @@ tbody tr:last-child td{border-bottom:none}
     <div class="cfg-steps">
       <div class="cstep"><div class="csn">1</div><div>Ve a <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> y crea un proyecto (sin Google Analytics).</div></div>
       <div class="cstep"><div class="csn">2</div><div>En el proyecto → <strong>Firestore Database</strong> → Crear base de datos → Modo producción.</div></div>
-      <div class="cstep"><div class="csn">3</div><div>Firestore → pestaña <strong>Reglas</strong> → reemplaza todo con:<br><code style="color:var(--accent);font-size:.75rem">rules_version='2'; service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if true; } } }</code><br><span style="color:var(--warn);font-size:.73rem">⚠️ Solo para uso personal en dispositivo propio. Para producción o uso compartido, configura autenticación Firebase antes de activar estas reglas.</span></div></div>
-      <div class="cstep"><div class="csn">4</div><div>Configuración del proyecto ⚙️ → <strong>Agregar app</strong> → Web (&lt;/&gt;) → copia el objeto <code style="color:var(--accent)">firebaseConfig</code>.</div></div>
-      <div class="cstep"><div class="csn">5</div><div>Pega el JSON abajo y toca <strong>Conectar Firebase</strong>.</div></div>
+      <div class="cstep"><div class="csn">3</div><div><strong>Authentication</strong> → pestaña Sign-in method → habilita el proveedor <strong>Google</strong>.</div></div>
+      <div class="cstep"><div class="csn">4</div><div>Firestore → pestaña <strong>Reglas</strong> → reemplaza todo con:<br><code style="color:var(--accent);font-size:.75rem">rules_version='2'; service cloud.firestore { match /databases/{database}/documents { match /usuarios/{uid}/{document=**} { allow read, write: if request.auth != null && request.auth.uid == uid; } } }</code><br><span style="color:var(--muted);font-size:.73rem">Cada acreditado y cada movimiento quedan protegidos por tu cuenta de Google — nadie más puede leerlos ni escribirlos.</span></div></div>
+      <div class="cstep"><div class="csn">5</div><div>Configuración del proyecto ⚙️ → <strong>Agregar app</strong> → Web (&lt;/&gt;) → copia el objeto <code style="color:var(--accent)">firebaseConfig</code>.</div></div>
+      <div class="cstep"><div class="csn">6</div><div>Pega el JSON abajo, toca <strong>Conectar Firebase</strong> e inicia sesión con Google.</div></div>
     </div>
     <div class="fg">
       <label>firebaseConfig JSON</label>
@@ -321,6 +322,17 @@ tbody tr:last-child td{border-bottom:none}
       <button class="btn btn-s" onclick="goLocal()"><i class="fas fa-laptop"></i> Solo local (este dispositivo)</button>
     </div>
     <p style="font-size:.73rem;color:var(--muted);margin-top:10px">Modo local: datos guardados en este navegador. No se sincronizan entre dispositivos.</p>
+  </div>
+</div>
+
+<!-- FIREBASE LOGIN -->
+<div id="fb-login" style="position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:6000;padding:20px">
+  <div class="cfg-box" style="text-align:center">
+    <div class="cfg-logo">HD Crédit</div>
+    <div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-bottom:12px">INICIAR SESIÓN</div>
+    <p class="cfg-desc">Tus acreditados están protegidos por cuenta. Inicia sesión con Google para ver y sincronizar tu cartera.</p>
+    <button class="btn btn-p" style="width:100%;justify-content:center" onclick="loginGoogle()"><i class="fab fa-google"></i> Iniciar sesión con Google</button>
+    <p style="font-size:.73rem;color:var(--muted);margin-top:14px">¿Ya usabas HD Crédit antes de este cambio? Después de iniciar sesión aquí, abre <code style="color:var(--accent)">migrar.html</code> una sola vez para copiar tus datos anteriores a tu cuenta.</p>
   </div>
 </div>
 
@@ -355,11 +367,12 @@ tbody tr:last-child td{border-bottom:none}
     <div class="ni" onclick="document.getElementById('fb-cfg').style.display='flex'"><i class="fas fa-fire"></i> Firebase</div>
   </div>
   <div class="sb-foot">
-    <div class="av">H</div>
-    <div>
-      <div class="ui-name">HD Crédit</div>
+    <div class="av" id="sb-avatar">H</div>
+    <div style="flex:1;min-width:0;overflow:hidden">
+      <div class="ui-name" id="ui-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">HD Crédit</div>
       <div class="ui-role" id="sync-lbl">● Local</div>
     </div>
+    <button class="btn-x" id="btn-logout" onclick="logoutFB()" title="Cerrar sesión" style="display:none;flex-shrink:0"><i class="fas fa-sign-out-alt"></i></button>
   </div>
 </nav>
 
@@ -660,10 +673,10 @@ const TF = {
 /* ============================================================
    STATE
 ============================================================ */
-let DB = null, USE_FB = false;
+let DB = null, AUTH = null, USE_FB = false, CURRENT_UID = null;
 let clientes = [], historial = [];
 let _pendingPago = {}, _pendingOrigHtml = {}, _lastPago = null, _undoing = false;
-let _unsubClientes = null, _unsubHistorial = null;
+let _unsubClientes = null, _unsubHistorial = null, _authUnsub = null;
 
 /* ============================================================
    FIREBASE (lazy load)
@@ -691,29 +704,57 @@ function connectFirebase() {
 }
 
 function loadFirebaseSDK(cfg) {
-  const s1 = document.createElement('script');
-  s1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
-  s1.onerror = () => { toast('No se pudo cargar Firebase SDK. Usando modo local.', 'err'); goLocal(); };
-  s1.onload = () => {
-    const s2 = document.createElement('script');
-    s2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
-    s2.onerror = () => { toast('No se pudo cargar Firebase SDK. Usando modo local.', 'err'); goLocal(); };
-    s2.onload = () => initFB(cfg);
-    document.head.appendChild(s2);
-  };
-  document.head.appendChild(s1);
+  // No reinyectar los <script> del SDK si ya están cargados (evita duplicados
+  // al reconectar Firebase más de una vez en la misma sesión)
+  if (window.firebase && typeof firebase.auth === 'function') { initFB(cfg); return; }
+  const srcs = [
+    'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
+    'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js',
+    'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js'
+  ];
+  let i = 0;
+  function loadNext() {
+    if (i >= srcs.length) { initFB(cfg); return; }
+    const src = srcs[i++];
+    if (document.querySelector(`script[src="${src}"]`)) { loadNext(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onerror = () => { toast('No se pudo cargar Firebase SDK. Usando modo local.', 'err'); goLocal(); };
+    s.onload = loadNext;
+    document.head.appendChild(s);
+  }
+  loadNext();
 }
 
 function initFB(cfg) {
   try {
     if (!firebase.apps.length) firebase.initializeApp(cfg);
     DB = firebase.firestore();
+    AUTH = firebase.auth();
     USE_FB = true;
-    document.getElementById('sync-lbl').textContent = '🟢 Firebase';
-    document.getElementById('sync-lbl').style.color = 'var(--accent)';
     document.getElementById('fb-cfg').style.display = 'none';
-    toast('Firebase conectado ✅', 'ok');
-    startFBSync();
+    if (_authUnsub) _authUnsub();
+    _authUnsub = AUTH.onAuthStateChanged(user => {
+      if (user) {
+        CURRENT_UID = user.uid;
+        document.getElementById('fb-login').style.display = 'none';
+        document.getElementById('sync-lbl').textContent = '🟢 ' + (user.displayName || user.email || 'Sesión activa');
+        document.getElementById('sync-lbl').style.color = 'var(--accent)';
+        document.getElementById('sb-avatar').textContent = ((user.displayName || user.email || 'H')[0] || 'H').toUpperCase();
+        document.getElementById('ui-name').textContent = user.displayName || user.email || 'HD Crédit';
+        document.getElementById('btn-logout').style.display = 'flex';
+        toast('Firebase conectado ✅', 'ok');
+        startFBSync();
+      } else {
+        CURRENT_UID = null;
+        if (_unsubClientes) { _unsubClientes(); _unsubClientes = null; }
+        if (_unsubHistorial) { _unsubHistorial(); _unsubHistorial = null; }
+        document.getElementById('btn-logout').style.display = 'none';
+        document.getElementById('sync-lbl').textContent = '○ Sin sesión';
+        document.getElementById('sync-lbl').style.color = 'var(--muted)';
+        document.getElementById('fb-login').style.display = 'flex';
+      }
+    });
   } catch(e) {
     console.error(e);
     toast('Error Firebase: ' + e.message, 'err');
@@ -721,28 +762,47 @@ function initFB(cfg) {
   }
 }
 
+function loginGoogle() {
+  if (!AUTH) return;
+  const provider = new firebase.auth.GoogleAuthProvider();
+  AUTH.signInWithPopup(provider).catch(e => toast('No se pudo iniciar sesión: ' + e.message, 'err'));
+}
+
+function logoutFB() {
+  if (!AUTH) return;
+  AUTH.signOut();
+}
+
+// Colecciones con alcance por usuario autenticado — reemplaza las rutas
+// planas /clientes y /historial (abiertas a cualquiera) usadas antes de Auth
+function CLI() { return DB.collection('usuarios').doc(CURRENT_UID).collection('clientes'); }
+function HIST() { return DB.collection('usuarios').doc(CURRENT_UID).collection('historial'); }
+
 function startFBSync() {
   // Cancelar listeners anteriores para evitar duplicados si se reconecta
   if (_unsubClientes) { _unsubClientes(); _unsubClientes = null; }
   if (_unsubHistorial) { _unsubHistorial(); _unsubHistorial = null; }
-  _unsubClientes = DB.collection('clientes').orderBy('createdAt').onSnapshot(snap => {
-    const datos = snap.docs.map(d => ({id: d.id, ...d.data()}));
-    if (datos.length > 0 || clientes.length === 0) {
-      clientes = datos;
-      syncAlertas();
-      localStorage.setItem('hd_c', JSON.stringify(clientes));
-    }
+  _unsubClientes = CLI().orderBy('createdAt').onSnapshot(snap => {
+    // Se confía siempre en el snapshot (incluye listas vacías reales, p.ej.
+    // al eliminar el último acreditado) — antes se descartaba ese caso y la
+    // pantalla quedaba con datos obsoletos
+    clientes = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    syncAlertas();
+    localStorage.setItem('hd_c', JSON.stringify(clientes));
     refresh();
+  }, err => {
+    console.error('HD Crédit — error de sincronización (clientes):', err);
+    toast('Error de sincronización: ' + err.message, 'err');
   });
-  _unsubHistorial = DB.collection('historial').orderBy('ts', 'desc').limit(500).onSnapshot(snap => {
-    const datos = snap.docs.map(d => ({id: d.id, ...d.data()}));
-    if (datos.length > 0 || historial.length === 0) {
-      historial = datos;
-      localStorage.setItem('hd_h', JSON.stringify(historial));
-    }
+  _unsubHistorial = HIST().orderBy('ts', 'desc').limit(500).onSnapshot(snap => {
+    historial = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    localStorage.setItem('hd_h', JSON.stringify(historial));
     renderH();
     renderCL();
     renderDash();
+  }, err => {
+    console.error('HD Crédit — error de sincronización (historial):', err);
+    toast('Error de sincronización: ' + err.message, 'err');
   });
 }
 
@@ -1011,14 +1071,18 @@ async function saveC() {
     alerta: calcAlerta({saldo, pagadas, nq, inicio}), updatedAt: new Date().toISOString() };
 
   if (eid) {
-    if (USE_FB) { await DB.collection('clientes').doc(eid).set(data, {merge:true}); }
-    else { const i = clientes.findIndex(x=>x.id===eid); if(i>=0) clientes[i]={...clientes[i],...data}; saveLocal(); refresh(); }
+    if (USE_FB) {
+      try { await CLI().doc(eid).set(data, {merge:true}); }
+      catch(e) { toast('No se pudo guardar en la nube: ' + e.message, 'err'); return; }
+    } else { const i = clientes.findIndex(x=>x.id===eid); if(i>=0) clientes[i]={...clientes[i],...data}; saveLocal(); refresh(); }
     toast(`${nombre} actualizado`, 'ok');
   } else {
     const id = 'c_' + Date.now();
     data.id = id; data.createdAt = new Date().toISOString();
-    if (USE_FB) { await DB.collection('clientes').doc(id).set(data); }
-    else { clientes.push(data); saveLocal(); refresh(); }
+    if (USE_FB) {
+      try { await CLI().doc(id).set(data); }
+      catch(e) { toast('No se pudo guardar en la nube: ' + e.message, 'err'); return; }
+    } else { clientes.push(data); saveLocal(); refresh(); }
     toast(`${nombre} agregado ✅`, 'ok');
   }
   cm('m-cliente');
@@ -1033,16 +1097,24 @@ function confirmDel(id) {
 
 async function delC(id) {
   if (USE_FB) {
-    await DB.collection('clientes').doc(id).delete();
-    // Limpiar historial huérfano en Firestore
     try {
-      const snap = await DB.collection('historial').where('clienteId', '==', id).get();
+      await CLI().doc(id).delete();
+    } catch(e) {
+      toast('No se pudo eliminar en la nube: ' + e.message, 'err');
+      return;
+    }
+    // Limpiar historial huérfano en Firestore (best-effort: el cliente ya se eliminó)
+    try {
+      const snap = await HIST().where('clienteId', '==', id).get();
       if (snap.docs.length) {
         const batch = DB.batch();
         snap.docs.forEach(doc => batch.delete(doc.ref));
         await batch.commit();
       }
-    } catch(e) { /* historial ya será invisible sin el cliente */ }
+    } catch(e) {
+      console.error('HD Crédit — no se pudo limpiar historial huérfano:', e);
+      toast('⚠️ Cliente eliminado, pero no se pudo limpiar su historial — revisa Firestore', 'wrn');
+    }
   } else {
     clientes = clientes.filter(x=>x.id!==id);
     historial = historial.filter(h=>h.clienteId!==id);
@@ -1075,8 +1147,13 @@ async function togglePago(cid, qIdx) {
 
   const alerta = calcAlerta({...c, pagadas, saldo});
   if (USE_FB) {
-    await DB.collection('clientes').doc(cid).set({pagos, pagadas, saldo, alerta, updatedAt: now.toISOString()}, {merge:true});
-    await DB.collection('historial').doc(log.id).set(log);
+    try {
+      await CLI().doc(cid).set({pagos, pagadas, saldo, alerta, updatedAt: now.toISOString()}, {merge:true});
+      await HIST().doc(log.id).set(log);
+    } catch(e) {
+      toast('❌ No se pudo registrar el cobro en la nube: ' + e.message, 'err');
+      return;
+    }
   } else {
     const i = clientes.findIndex(x=>x.id===cid);
     clientes[i] = {...clientes[i], pagos, pagadas, saldo, alerta};
@@ -1147,18 +1224,12 @@ async function doReverso(cid, qIdx) {
 ============================================================ */
 function openReporte(id) {
   const c = clientes.find(x => x.id === id); if (!c) return;
-  const rec = calcRecargoPorCliente(c);
-  const elapsed = Math.min(qsElapsed(c.inicio), c.nq);
-  const atrasadas = Math.max(0, elapsed - c.pagadas);
-  const capitalAt = atrasadas * c.pq;
-  const faltantes = c.nq - c.pagadas;
-  const saldo = faltantes * c.pq;
-  const totalCobrar = capitalAt + rec.total;
+  const { rec, atrasadas, capitalAt, faltantes, saldo, totalCobrar, esAtrasado, esLiquidado } = resumenCliente(c);
   const iniLabel = c.inicio
     ? new Date(c.inicio + 'T12:00:00').toLocaleDateString('es-MX', {day:'2-digit', month:'long', year:'numeric'})
     : '—';
-  const estado = c.saldo === 0 ? '✅ Liquidado'
-    : calcAlerta(c) === 'ATRASADO' ? '⚠️ Con atraso'
+  const estado = esLiquidado ? '✅ Liquidado'
+    : esAtrasado ? '⚠️ Con atraso'
     : '🟢 Al corriente';
 
   const recHtml = rec.periodos.length ? `
@@ -1222,18 +1293,12 @@ function openReporte(id) {
 }
 
 function sendReporte(c) {
-  const rec = calcRecargoPorCliente(c);
-  const elapsed = Math.min(qsElapsed(c.inicio), c.nq);
-  const atrasadas = Math.max(0, elapsed - c.pagadas);
-  const capitalAt = atrasadas * c.pq;
-  const faltantes = c.nq - c.pagadas;
-  const saldo = faltantes * c.pq;
-  const totalCobrar = capitalAt + rec.total;
+  const { rec, atrasadas, capitalAt, faltantes, saldo, totalCobrar, esAtrasado, esLiquidado } = resumenCliente(c);
   const iniLabel = c.inicio
     ? new Date(c.inicio + 'T12:00:00').toLocaleDateString('es-MX', {day:'2-digit', month:'long', year:'numeric'})
     : '—';
-  const estado = c.saldo === 0 ? 'LIQUIDADO ✅'
-    : calcAlerta(c) === 'ATRASADO' ? 'CON ATRASO ⚠️'
+  const estado = esLiquidado ? 'LIQUIDADO ✅'
+    : esAtrasado ? 'CON ATRASO ⚠️'
     : 'AL CORRIENTE ✅';
 
   let recStr = '';
@@ -1284,12 +1349,10 @@ _¡Gracias por tu confianza! 🙏_`;
 function openEC(id) {
   const c = clientes.find(x=>x.id===id); if(!c) return;
 
-  const faltantes = c.nq - c.pagadas;
-  const saldo = faltantes * c.pq;
+  const { faltantes, saldo, elapsed: elapsedEC, esAtrasado, esLiquidado } = resumenCliente(c);
 
   // Timeline de quincenas — usa array real de pagos y marca vencidas en rojo
   const pagosArr = (c.pagos || Array(c.nq).fill(false)).slice(0, c.nq);
-  const elapsedEC = Math.min(qsElapsed(c.inicio), c.nq);
   const nextUnpaid = pagosArr.findIndex(p => !p);
   const timeline = pagosArr.map((paid, i) => {
     if (paid) return `<div class="ec-q ck" title="Q${i+1} pagada">${i+1}</div>`;
@@ -1298,8 +1361,8 @@ function openEC(id) {
     return `<div class="ec-q pd" title="Q${i+1} pendiente">${i+1}</div>`;
   }).join('');
 
-  const estado = c.saldo===0 ? '✅ Liquidado'
-    : calcAlerta(c)==='ATRASADO' ? '⚠️ Con atraso'
+  const estado = esLiquidado ? '✅ Liquidado'
+    : esAtrasado ? '⚠️ Con atraso'
     : '🟢 Al corriente';
 
   document.getElementById('ec-body').innerHTML = `
@@ -1338,10 +1401,9 @@ function openEC(id) {
 }
 
 function sendEC(c) {
-  const faltantes = c.nq - c.pagadas;
-  const saldo = faltantes * c.pq;
-  const estado = c.saldo===0 ? 'LIQUIDADO ✅'
-    : calcAlerta(c)==='ATRASADO' ? 'CON ATRASO ⚠️'
+  const { faltantes, saldo, esAtrasado, esLiquidado } = resumenCliente(c);
+  const estado = esLiquidado ? 'LIQUIDADO ✅'
+    : esAtrasado ? 'CON ATRASO ⚠️'
     : 'AL CORRIENTE ✅';
 
   const msg =
@@ -1633,10 +1695,10 @@ function renderH(list) {
   tb.innerHTML = data.length ? data.map(h=>`<tr>
     <td><strong>${esc(h.nombre||'—')}</strong></td>
     <td><span style="font-family:'DM Mono',monospace;color:var(--accent)">$${(h.monto||0).toLocaleString('es-MX')}</span></td>
-    <td><span style="font-family:'DM Mono',monospace;font-size:.76rem">${h.qKey||'—'}</span></td>
-    <td>${h.fecha||'—'}</td>
-    <td style="font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)">${h.hora||'—'}</td>
-    <td><span class="badge ${h.accion==='PAGO'?'bg':'by'}">${h.accion||'—'}</span></td>
+    <td><span style="font-family:'DM Mono',monospace;font-size:.76rem">${esc(h.qKey||'—')}</span></td>
+    <td>${esc(h.fecha||'—')}</td>
+    <td style="font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)">${esc(h.hora||'—')}</td>
+    <td><span class="badge ${h.accion==='PAGO'?'bg':'by'}">${esc(h.accion||'—')}</span></td>
   </tr>`).join('')
     : '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Sin registros</td></tr>';
 }
@@ -1844,6 +1906,24 @@ function calcRecargoPorCliente(c) {
     periodos.push({ idx: i + 1, dueDate, diasAtraso, recargo: diasAtraso * 50 });
   }
   return { periodos, total: periodos.reduce((a, p) => a + p.recargo, 0) };
+}
+
+/* ============================================================
+   RESUMEN DE CLIENTE — cálculo único de saldo/atraso/recargo,
+   usado por Reporte Personal y Estado de Cuenta (antes cada uno
+   recalculaba el saldo por separado y podían mostrar cifras distintas)
+============================================================ */
+function resumenCliente(c) {
+  const elapsed = Math.min(qsElapsed(c.inicio), c.nq);
+  const atrasadas = Math.max(0, elapsed - c.pagadas);
+  const capitalAt = atrasadas * c.pq;
+  const faltantes = c.nq - c.pagadas;
+  const saldo = faltantes * c.pq;
+  const rec = calcRecargoPorCliente(c);
+  const totalCobrar = capitalAt + rec.total;
+  const esAtrasado = calcAlerta(c) === 'ATRASADO';
+  const esLiquidado = saldo === 0;
+  return { elapsed, atrasadas, capitalAt, faltantes, saldo, rec, totalCobrar, esAtrasado, esLiquidado };
 }
 
 function switchMorososTab(tab) {
@@ -2075,6 +2155,7 @@ window.filterC=filterC; window.filterH=filterH;
 window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
 window.doExport=doExport; window.doExportXLSX=doExportXLSX; window.doExportJSON=doExportJSON; window.doImportJSON=doImportJSON;
 window.connectFirebase=connectFirebase; window.goLocal=goLocal;
+window.loginGoogle=loginGoogle; window.logoutFB=logoutFB;
 window.om=om; window.cm=cm;
 window.initPago=initPago; window.undoLastPago=undoLastPago;
 window.switchMorososTab=switchMorososTab; window.renderMorosos=renderMorosos;
