@@ -733,6 +733,11 @@ function initFB(cfg) {
     AUTH = firebase.auth();
     USE_FB = true;
     document.getElementById('fb-cfg').style.display = 'none';
+    // Recoge el resultado si venimos de vuelta de signInWithRedirect
+    AUTH.getRedirectResult().catch(e => {
+      console.error('HD Crédit — error de inicio de sesión (redirect):', e);
+      toast('No se pudo iniciar sesión: ' + e.message, 'err');
+    });
     if (_authUnsub) _authUnsub();
     _authUnsub = AUTH.onAuthStateChanged(user => {
       if (user) {
@@ -765,7 +770,9 @@ function initFB(cfg) {
 function loginGoogle() {
   if (!AUTH) return;
   const provider = new firebase.auth.GoogleAuthProvider();
-  AUTH.signInWithPopup(provider).catch(e => toast('No se pudo iniciar sesión: ' + e.message, 'err'));
+  // signInWithRedirect en vez de signInWithPopup: las apps instaladas
+  // (modo standalone/PWA) suelen bloquear o romper el flujo de popup
+  AUTH.signInWithRedirect(provider).catch(e => toast('No se pudo iniciar sesión: ' + e.message, 'err'));
 }
 
 function logoutFB() {
@@ -2166,3 +2173,4 @@ init();
 </script>
 </body>
 </html>
+
