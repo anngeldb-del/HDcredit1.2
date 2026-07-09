@@ -465,6 +465,11 @@ tbody tr:last-child td{border-bottom:none}
           <option value="6">6Q</option><option value="8">8Q</option>
           <option value="10">10Q</option><option value="12">12Q</option>
         </select>
+        <select class="fsel" id="flt-prod" onchange="filterC()">
+          <option value="">Todos los productos</option>
+          <option value="quincenal_fijo">Préstamo Quincenal</option>
+          <option value="unico_30d">Préstamo 30 Días</option>
+        </select>
       </div>
       <div class="ts"><table><thead><tr>
         <th>#</th><th>Nombre</th><th>Monto</th><th>Pago Q</th>
@@ -497,6 +502,12 @@ tbody tr:last-child td{border-bottom:none}
         <th>Monto</th><th>6 Quincenas</th><th>8 Quincenas</th><th>10 Quincenas</th><th>12 Quincenas</th><th>Interés (6Q)</th>
       </tr></thead><tbody id="tb-f"></tbody></table></div>
     </div>
+    <div class="tw" style="margin-top:20px">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border)"><strong style="font-family:'Syne',sans-serif">Préstamo 30 Días (pago único)</strong></div>
+      <div class="ts"><table><thead><tr>
+        <th>Monto</th><th>Total a pagar (30 días)</th><th>Interés</th>
+      </tr></thead><tbody id="tb-f30"></tbody></table></div>
+    </div>
   </div>
 </div>
 
@@ -524,7 +535,7 @@ tbody tr:last-child td{border-bottom:none}
   <div class="ph">
     <div>
       <div class="pt">Morosos y Recargos</div>
-      <div class="ps">Pagos atrasados · Recargo $50/día por cada quincena vencida</div>
+      <div class="ps">Pagos atrasados · Recargo $50/día (quincenal) o $100/día (30 días) por periodo vencido</div>
     </div>
   </div>
   <div class="ca">
@@ -564,6 +575,12 @@ tbody tr:last-child td{border-bottom:none}
     <input type="hidden" id="eid">
     <div class="fgrid">
       <div class="fg full"><label>Nombre Completo *</label><input class="fc" id="f-nom" placeholder="Nombre del acreditado"></div>
+      <div class="fg full"><label>Producto *</label>
+        <select class="fc" id="f-producto" onchange="onProductoChange()">
+          <option value="quincenal_fijo">Préstamo Quincenal</option>
+          <option value="unico_30d">Préstamo 30 Días</option>
+        </select>
+      </div>
       <div class="fg"><label>Monto *</label>
         <select class="fc" id="f-monto" onchange="calcPQ()">
           <option value="">Seleccionar...</option>
@@ -573,16 +590,16 @@ tbody tr:last-child td{border-bottom:none}
           <option>13000</option><option>14000</option><option>15000</option>
         </select>
       </div>
-      <div class="fg"><label>Plazo *</label>
+      <div class="fg" id="fg-plazo"><label>Plazo *</label>
         <select class="fc" id="f-plazo" onchange="calcPQ()">
           <option value="">Seleccionar...</option>
           <option value="6">6 Quincenas</option><option value="8">8 Quincenas</option>
           <option value="10">10 Quincenas</option><option value="12">12 Quincenas</option>
         </select>
       </div>
-      <div class="fg"><label>Pago Quincenal</label><input class="fc" id="f-pq" readonly placeholder="Calculado" style="color:var(--accent)"></div>
+      <div class="fg"><label id="lbl-pq">Pago Quincenal</label><input class="fc" id="f-pq" readonly placeholder="Calculado" style="color:var(--accent)"></div>
       <div class="fg"><label>Fecha Inicio</label><input class="fc" type="date" id="f-ini"></div>
-      <div class="fg"><label>Q ya Pagadas</label><input class="fc" type="number" id="f-pag" value="0" min="0"></div>
+      <div class="fg" id="fg-pagadas"><label id="lbl-pag">Q ya Pagadas</label><input class="fc" type="number" id="f-pag" value="0" min="0"></div>
       <div class="fg full"><label>WhatsApp (10 dígitos)</label><input class="fc" id="f-tel" placeholder="5512345678"></div>
       <div class="fg full"><label>Notas</label><textarea class="fc" id="f-notas" rows="2" placeholder="Observaciones..."></textarea></div>
     </div>
@@ -671,6 +688,15 @@ const TF = {
   14000:{6:3034,8:2431,10:2100,12:1867},
   15000:{6:3251,8:2601,10:2251,12:2001}
 };
+
+/* ============================================================
+   TABLA DE FACTORES — PRÉSTAMO 30 DÍAS (pago único, +15%)
+============================================================ */
+const TF30 = {
+  1000:1150, 2000:2300, 3000:3450, 4000:4600, 5000:5750,
+  6000:6900, 7000:8050, 8000:9200, 9000:10350, 10000:11500
+};
+const RECARGO_DIA = { quincenal_fijo: 50, unico_30d: 100 };
 
 /* ============================================================
    STATE
@@ -966,11 +992,17 @@ function nextQBoundary(d) {
     ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
     : new Date(d.getFullYear(), d.getMonth() + 1, 15);
 }
-function qsElapsed(inicio) {
+function qsElapsed(inicio, producto = 'quincenal_fijo') {
   if (!inicio) return 0;
   const start = new Date(inicio + 'T12:00:00');
   const now   = new Date();
   if (start >= now) return 0;
+  if (producto === 'unico_30d') {
+    // Pago único: vence a los 30 días naturales del inicio, sin alinearse a quincenas
+    const due = new Date(start);
+    due.setDate(due.getDate() + 30);
+    return now >= due ? 1 : 0;
+  }
   let d = new Date(start);
   // Avanzar al cierre de la quincena de inicio
   d.getDate() < 15
@@ -990,7 +1022,7 @@ function qsElapsed(inicio) {
 function calcAlerta(c) {
   if (!c || !c.nq || c.saldo === 0 || (c.pagadas||0) >= c.nq) return '';
   if (!c.inicio) return '';
-  const expected = Math.min(qsElapsed(c.inicio), c.nq);
+  const expected = Math.min(qsElapsed(c.inicio, c.producto), c.nq);
   return (c.pagadas||0) < expected ? 'ATRASADO' : '';
 }
 
@@ -1008,15 +1040,34 @@ function autoBackup() {
 /* ============================================================
    CRUD
 ============================================================ */
+function onProductoChange() {
+  const producto = document.getElementById('f-producto').value;
+  const montoSel = document.getElementById('f-monto');
+  const montoActual = montoSel.value;
+  const montos = producto === 'unico_30d'
+    ? [1000,2000,3000,4000,5000,6000,7000,8000,9000,10000]
+    : [1000,2000,3000,4000,5000,6000,7000,8000,9000,10000,11000,12000,13000,14000,15000];
+  montoSel.innerHTML = '<option value="">Seleccionar...</option>'
+    + montos.map(m => `<option>${m}</option>`).join('');
+  if (montos.includes(parseInt(montoActual))) montoSel.value = montoActual;
+
+  document.getElementById('fg-plazo').style.display = producto === 'unico_30d' ? 'none' : '';
+  document.getElementById('lbl-pq').textContent = producto === 'unico_30d' ? 'Total a Pagar (30 días)' : 'Pago Quincenal';
+  document.getElementById('lbl-pag').textContent = producto === 'unico_30d' ? '¿Ya pagado? (0 o 1)' : 'Q ya Pagadas';
+  calcPQ();
+}
+
 function openNew() {
   document.getElementById('eid').value = '';
   document.getElementById('m-title').textContent = 'Nuevo Acreditado';
   ['f-nom','f-tel','f-notas'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-producto').value = 'quincenal_fijo';
   document.getElementById('f-monto').value = '';
   document.getElementById('f-plazo').value = '';
   document.getElementById('f-pq').value = '';
   document.getElementById('f-ini').value = new Date().toISOString().split('T')[0];
   document.getElementById('f-pag').value = '0';
+  onProductoChange();
   om('m-cliente');
 }
 
@@ -1025,6 +1076,8 @@ function editC(id) {
   document.getElementById('eid').value = id;
   document.getElementById('m-title').textContent = 'Editar Acreditado';
   document.getElementById('f-nom').value = c.nombre;
+  document.getElementById('f-producto').value = c.producto || 'quincenal_fijo';
+  onProductoChange();
   document.getElementById('f-monto').value = c.monto;
   document.getElementById('f-plazo').value = c.nq;
   document.getElementById('f-pq').value = '$' + (c.pq||0).toLocaleString('es-MX');
@@ -1036,9 +1089,16 @@ function editC(id) {
 }
 
 function calcPQ() {
+  const producto = document.getElementById('f-producto').value;
   const m = parseInt(document.getElementById('f-monto').value)||0;
-  const p = parseInt(document.getElementById('f-plazo').value)||0;
   const pq = document.getElementById('f-pq');
+  if (producto === 'unico_30d') {
+    if (!m) { pq.value = ''; return; }
+    if (!TF30[m]) { pq.value = 'Monto no válido'; return; }
+    pq.value = '$' + TF30[m].toLocaleString('es-MX');
+    return;
+  }
+  const p = parseInt(document.getElementById('f-plazo').value)||0;
   if (m && p) {
     if (!TF[m]) { pq.value = 'Monto no válido'; return; }
     if (!TF[m][p]) { pq.value = 'No aplica'; return; }
@@ -1048,8 +1108,9 @@ function calcPQ() {
 
 async function saveC() {
   const nombre = document.getElementById('f-nom').value.trim();
+  const producto = document.getElementById('f-producto').value || 'quincenal_fijo';
   const monto = parseInt(document.getElementById('f-monto').value)||0;
-  const nq = parseInt(document.getElementById('f-plazo').value)||0;
+  const nq = producto === 'unico_30d' ? 1 : (parseInt(document.getElementById('f-plazo').value)||0);
   const inicio = document.getElementById('f-ini').value;
   const pagadas = Math.min(parseInt(document.getElementById('f-pag').value)||0, nq);
   const telefono = document.getElementById('f-tel').value.replace(/\D/g,'').slice(0,10);
@@ -1057,10 +1118,16 @@ async function saveC() {
   const eid = document.getElementById('eid').value;
 
   if (!nombre || !monto || !nq) { toast('Completa los campos requeridos', 'wrn'); return; }
-  if (!TF[monto] || !TF[monto][nq]) { toast('Combinación monto/plazo no válida', 'err'); return; }
+  let pq;
+  if (producto === 'unico_30d') {
+    if (!TF30[monto]) { toast('Monto no válido para Préstamo 30 Días', 'err'); return; }
+    pq = TF30[monto];
+  } else {
+    if (!TF[monto] || !TF[monto][nq]) { toast('Combinación monto/plazo no válida', 'err'); return; }
+    pq = TF[monto][nq];
+  }
   if (!inicio && !eid) toast('⚠️ Sin fecha de inicio: no se podrán detectar atrasos automáticamente', 'wrn');
 
-  const pq = TF[monto][nq];
   const saldo = Math.max(0, (nq - pagadas) * pq);
   // Al editar: preservar el array pagos si el plazo y las quincenas pagadas no cambiaron
   // (evita destruir el patrón de pagos individuales generado por reversiones)
@@ -1076,8 +1143,8 @@ async function saveC() {
   } else {
     pagos = Array(nq).fill(false).map((_,i) => i < pagadas);
   }
-  const data = { nombre, monto, pq, nq, inicio, pagadas, saldo, pagos, telefono, notas,
-    alerta: calcAlerta({saldo, pagadas, nq, inicio}), updatedAt: new Date().toISOString() };
+  const data = { nombre, producto, monto, pq, nq, inicio, pagadas, saldo, pagos, telefono, notas,
+    alerta: calcAlerta({saldo, pagadas, nq, inicio, producto}), updatedAt: new Date().toISOString() };
 
   if (eid) {
     if (USE_FB) {
@@ -1193,7 +1260,7 @@ function openReverso(id) {
       Selecciona la quincena a revertir de <strong>${esc(c.nombre)}</strong>:
     </p>
     ${pagadas.map(i => {
-      const dueDate = getQDueDate(c.inicio, i);
+      const dueDate = getQDueDate(c.inicio, i, c.producto);
       const dueLbl = dueDate
         ? dueDate.toLocaleDateString('es-MX', {day:'2-digit', month:'short', year:'2-digit'})
         : '—';
@@ -1241,9 +1308,10 @@ function openReporte(id) {
     : esAtrasado ? '⚠️ Con atraso'
     : '🟢 Al corriente';
 
+  const porDia = RECARGO_DIA[c.producto||'quincenal_fijo'] ?? 50;
   const recHtml = rec.periodos.length ? `
     <div class="ec-card" style="border-color:rgba(255,184,0,.25)">
-      <div class="ec-title" style="color:var(--warn)"><i class="fas fa-clock" style="margin-right:6px"></i>Recargos por Atraso ($50/día por quincena)</div>
+      <div class="ec-title" style="color:var(--warn)"><i class="fas fa-clock" style="margin-right:6px"></i>Recargos por Atraso ($${porDia}/día)</div>
       ${rec.periodos.map(p => `
         <div class="ec-row">
           <span class="ec-lbl">Q${p.idx} — ${p.diasAtraso} días de atraso</span>
@@ -1286,12 +1354,19 @@ function openReporte(id) {
     <div class="ec-card">
       <div class="ec-title"><i class="fas fa-file-invoice-dollar" style="margin-right:6px"></i>Detalles del Préstamo</div>
       <div class="ec-row"><span class="ec-lbl">Monto prestado</span><span class="ec-val" style="color:var(--accent)">$${c.monto.toLocaleString('es-MX')}</span></div>
+      ${c.producto==='unico_30d' ? `
+      <div class="ec-row"><span class="ec-lbl">Plazo</span><span class="ec-val">30 días (pago único)</span></div>
+      <div class="ec-row"><span class="ec-lbl">Total a pagar</span><span class="ec-val">$${c.pq.toLocaleString('es-MX')}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Fecha de inicio</span><span class="ec-val">${iniLabel}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Estado de pago</span><span class="ec-val" style="color:${faltantes>0?'var(--warn)':'var(--accent)'}">${faltantes>0?'Pendiente':'Pagado'}</span></div>
+      ` : `
       <div class="ec-row"><span class="ec-lbl">Plazo total</span><span class="ec-val">${c.nq} quincenas</span></div>
       <div class="ec-row"><span class="ec-lbl">Pago quincenal</span><span class="ec-val">$${c.pq.toLocaleString('es-MX')}</span></div>
       <div class="ec-row"><span class="ec-lbl">Fecha de inicio</span><span class="ec-val">${iniLabel}</span></div>
       <div class="ec-row"><span class="ec-lbl">Quincenas pagadas</span><span class="ec-val" style="color:var(--accent)">${c.pagadas} de ${c.nq}</span></div>
       <div class="ec-row"><span class="ec-lbl">Quincenas restantes</span><span class="ec-val" style="color:${faltantes > 0 ? 'var(--warn)' : 'var(--accent)'}">${faltantes}</span></div>
       ${atrasadas > 0 ? `<div class="ec-row"><span class="ec-lbl">Quincenas atrasadas</span><span class="ec-val" style="color:var(--danger)">${atrasadas}</span></div>` : ''}
+      `}
     </div>
     ${recHtml}`;
 
@@ -1310,9 +1385,10 @@ function sendReporte(c) {
     : esAtrasado ? 'CON ATRASO ⚠️'
     : 'AL CORRIENTE ✅';
 
+  const porDia = RECARGO_DIA[c.producto||'quincenal_fijo'] ?? 50;
   let recStr = '';
   if (rec.periodos.length) {
-    recStr += '\n\n⏰ *RECARGOS POR ATRASO ($50/día)*';
+    recStr += `\n\n⏰ *RECARGOS POR ATRASO ($${porDia}/día)*`;
     recStr += rec.periodos.map(p =>
       `\n• Q${p.idx}: ${p.diasAtraso} días → *$${p.recargo.toLocaleString('es-MX')}*`
     ).join('');
@@ -1325,6 +1401,21 @@ function sendReporte(c) {
     recStr = `\n\n💰 *Saldo pendiente: $${saldo.toLocaleString('es-MX')}*`;
   }
 
+  const detalleStr = c.producto === 'unico_30d'
+    ? `• Monto prestado: *$${c.monto.toLocaleString('es-MX')}*
+• Plazo: *30 días (pago único)*
+• Total a pagar: *$${c.pq.toLocaleString('es-MX')}*
+• Fecha de inicio: *${iniLabel}*`
+    : `• Monto prestado: *$${c.monto.toLocaleString('es-MX')}*
+• Plazo: *${c.nq} quincenas*
+• Pago quincenal: *$${c.pq.toLocaleString('es-MX')}*
+• Fecha de inicio: *${iniLabel}*`;
+
+  const avanceStr = c.producto === 'unico_30d'
+    ? `• Estado de pago: *${faltantes>0?'Pendiente':'Pagado'}*`
+    : `• Pagadas: *${c.pagadas} de ${c.nq}*
+• Restantes: *${faltantes}*${atrasadas > 0 ? `\n• Atrasadas: *${atrasadas}*` : ''}`;
+
   const msg =
 `━━━━━━━━━━━━━━━━━━━━
 📋 *REPORTE PERSONAL*
@@ -1334,14 +1425,10 @@ function sendReporte(c) {
 ${c.telefono ? `📱 ${c.telefono}` : ''}
 
 📄 *DETALLES DEL PRÉSTAMO*
-• Monto prestado: *$${c.monto.toLocaleString('es-MX')}*
-• Plazo: *${c.nq} quincenas*
-• Pago quincenal: *$${c.pq.toLocaleString('es-MX')}*
-• Fecha de inicio: *${iniLabel}*
+${detalleStr}
 
 📊 *AVANCE DE PAGOS*
-• Pagadas: *${c.pagadas} de ${c.nq}*
-• Restantes: *${faltantes}*${atrasadas > 0 ? `\n• Atrasadas: *${atrasadas}*` : ''}${recStr}
+${avanceStr}${recStr}
 
 📌 Estado: *${estado}*
 ━━━━━━━━━━━━━━━━━━━━
@@ -1379,14 +1466,18 @@ function openEC(id) {
       <div class="ec-title">Información del préstamo</div>
       <div class="ec-row"><span class="ec-lbl">Acreditado</span><span class="ec-val">${esc(c.nombre)}</span></div>
       <div class="ec-row"><span class="ec-lbl">Monto prestado</span><span class="ec-val" style="color:var(--accent)">$${c.monto.toLocaleString('es-MX')}</span></div>
-      <div class="ec-row"><span class="ec-lbl">Plazo total</span><span class="ec-val">${c.nq} quincenas</span></div>
-      <div class="ec-row"><span class="ec-lbl">Pago quincenal</span><span class="ec-val">$${c.pq.toLocaleString('es-MX')}</span></div>
+      <div class="ec-row"><span class="ec-lbl">Plazo total</span><span class="ec-val">${c.producto==='unico_30d'?'30 días (pago único)':`${c.nq} quincenas`}</span></div>
+      <div class="ec-row"><span class="ec-lbl">${c.producto==='unico_30d'?'Total a pagar':'Pago quincenal'}</span><span class="ec-val">$${c.pq.toLocaleString('es-MX')}</span></div>
       <div class="ec-row"><span class="ec-lbl">Estado</span><span class="ec-val">${estado}</span></div>
     </div>
     <div class="ec-card">
       <div class="ec-title">Avance de pagos</div>
+      ${c.producto==='unico_30d' ? `
+      <div class="ec-row"><span class="ec-lbl">Estado de pago</span><span class="ec-val" style="color:${faltantes>0?'var(--warn)':'var(--accent)'}">${faltantes>0?'Pendiente':'Pagado'}</span></div>
+      ` : `
       <div class="ec-row"><span class="ec-lbl">Quincenas pagadas</span><span class="ec-val" style="color:var(--accent)">${c.pagadas} de ${c.nq}</span></div>
       <div class="ec-row"><span class="ec-lbl">Quincenas restantes</span><span class="ec-val" style="color:${faltantes>0?'var(--warn)':'var(--accent)'}">${faltantes}</span></div>
+      `}
       <div class="ec-row"><span class="ec-lbl">Saldo pendiente</span><span class="ec-val" style="color:${saldo>0?'var(--warn)':'var(--accent)'}">$${saldo.toLocaleString('es-MX')}</span></div>
       <div style="margin-top:12px">
         <div class="ec-title" style="margin-bottom:8px">Progreso visual</div>
@@ -1415,6 +1506,19 @@ function sendEC(c) {
     : esAtrasado ? 'CON ATRASO ⚠️'
     : 'AL CORRIENTE ✅';
 
+  const detalleStr = c.producto === 'unico_30d'
+    ? `• Monto prestado: *$${c.monto.toLocaleString('es-MX')}*
+• Plazo: *30 días (pago único)*
+• Total a pagar: *$${c.pq.toLocaleString('es-MX')}*`
+    : `• Monto prestado: *$${c.monto.toLocaleString('es-MX')}*
+• Plazo: *${c.nq} quincenas*
+• Pago quincenal: *$${c.pq.toLocaleString('es-MX')}*`;
+
+  const avanceStr = c.producto === 'unico_30d'
+    ? `• Estado de pago: *${faltantes>0?'Pendiente':'Pagado'}*`
+    : `• Quincenas pagadas: *${c.pagadas} de ${c.nq}*
+• Quincenas restantes: *${faltantes}*`;
+
   const msg =
 `━━━━━━━━━━━━━━━━━━━━
 💳 *ESTADO DE CUENTA*
@@ -1423,13 +1527,10 @@ function sendEC(c) {
 👤 *${c.nombre}*
 
 📋 *DETALLES DEL PRÉSTAMO*
-• Monto prestado: *$${c.monto.toLocaleString('es-MX')}*
-• Plazo: *${c.nq} quincenas*
-• Pago quincenal: *$${c.pq.toLocaleString('es-MX')}*
+${detalleStr}
 
 📊 *AVANCE DE PAGOS*
-• Quincenas pagadas: *${c.pagadas} de ${c.nq}*
-• Quincenas restantes: *${faltantes}*
+${avanceStr}
 • Saldo pendiente: *$${saldo.toLocaleString('es-MX')}*
 
 📌 Estado: *${estado}*
@@ -1448,7 +1549,9 @@ function waCliente(id) {
   const c = clientes.find(x=>x.id===id); if(!c) return;
   if (!c.telefono) { toast('Sin teléfono registrado', 'wrn'); return; }
   const faltantes = c.nq - c.pagadas;
-  const msg = `Hola ${c.nombre} 👋\n\nTe recordamos que tu pago quincenal de *$${c.pq.toLocaleString('es-MX')}* está próximo.\n\n📊 Quincenas: ${c.pagadas}/${c.nq} · Faltan: ${faltantes}\n💰 Saldo: $${c.saldo.toLocaleString('es-MX')}\n\n¡Gracias! — HD Crédit 🙏`;
+  const msg = c.producto === 'unico_30d'
+    ? `Hola ${c.nombre} 👋\n\nTe recordamos que tu pago único de *$${c.pq.toLocaleString('es-MX')}* está próximo a vencer.\n\n💰 Saldo: $${c.saldo.toLocaleString('es-MX')}\n\n¡Gracias! — HD Crédit 🙏`
+    : `Hola ${c.nombre} 👋\n\nTe recordamos que tu pago quincenal de *$${c.pq.toLocaleString('es-MX')}* está próximo.\n\n📊 Quincenas: ${c.pagadas}/${c.nq} · Faltan: ${faltantes}\n💰 Saldo: $${c.saldo.toLocaleString('es-MX')}\n\n¡Gracias! — HD Crédit 🙏`;
   window.open(`https://wa.me/52${c.telefono}?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
@@ -1534,23 +1637,26 @@ function renderC(list) {
       :'<span class="badge bg">✓ Al corriente</span>';
     const esNuevo = (c.pagadas||0) === 0 && (c.saldo||0) > 0;
     const badgeNuevo = esNuevo ? '<span class="badge bnn" style="margin-left:5px;font-size:.62rem;vertical-align:middle"><i class="fas fa-certificate" style="font-size:.55rem;margin-right:2px"></i>Nuevo</span>' : '';
-    const fv = calcVenc(c.inicio, c.nq);
+    const fv = calcVenc(c.inicio, c.nq, c.producto);
     const iniLabel = c.inicio ? new Date(c.inicio+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
-    const elapsed = c.inicio ? qsElapsed(c.inicio) : 0;
+    const elapsed = c.inicio ? qsElapsed(c.inicio, c.producto) : 0;
     const iniTitle = c.inicio ? `Inicio: ${c.inicio} | Q esperadas: ${Math.min(elapsed,c.nq)} | Q pagadas: ${c.pagadas||0}` : 'Sin fecha de inicio';
     return `<tr>
       <td><span style="font-family:'DM Mono',monospace;color:var(--muted)">${String(i+1).padStart(2,'0')}</span></td>
       <td><strong>${esc(c.nombre||'—')}</strong>${badgeNuevo}</td>
       <td><span style="font-family:'DM Mono',monospace;color:var(--accent)">$${c.monto.toLocaleString('es-MX')}</span></td>
       <td><span style="font-family:'DM Mono',monospace">$${c.pq.toLocaleString('es-MX')}</span></td>
-      <td><span class="badge bb">${c.nq}Q</span></td>
-      <td><span style="font-family:'DM Mono',monospace">${c.pagadas}/${c.nq}</span></td>
+      <td><span class="badge bb">${plazoLabel(c)}</span></td>
+      <td><span style="font-family:'DM Mono',monospace">${c.producto==='unico_30d' ? (c.pagadas>=1?'Pagado':'Pendiente') : `${c.pagadas}/${c.nq}`}</span></td>
       <td><div class="pb"><div class="pf ${pct<50?'d':pct<80?'w':''}" style="width:${pct}%"></div></div></td>
       <td><span style="font-family:'DM Mono',monospace;color:${c.saldo>0?'var(--warn)':'var(--accent)'}">$${c.saldo.toLocaleString('es-MX')}</span></td>
       <td>${eb}</td>
       <td title="${iniTitle}"><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${iniLabel}</span></td>
       <td><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${fv}</span></td>
       <td><div style="display:flex;gap:5px">
+        ${c.producto==='unico_30d' ? (c.saldo>0
+          ? `<button class="btn btn-s btn-sm btn-ic" data-pago="${c.id}_0" onclick="initPago('${c.id}',0)" title="Toca 2 veces para marcar pagado" style="color:var(--accent)"><i class="far fa-circle"></i></button>`
+          : `<button class="btn btn-s btn-sm btn-ic" onclick="openReverso('${c.id}')" title="Pagado · clic para revertir" style="color:var(--accent)"><i class="fas fa-check"></i></button>`) : ''}
         <button class="btn btn-s btn-sm btn-ic" onclick="openReporte('${c.id}')" title="Reporte Personal" style="color:var(--purple)"><i class="fas fa-clipboard-list"></i></button>
         <button class="btn btn-s btn-sm btn-ic" onclick="openEC('${c.id}')" title="Estado de cuenta"><i class="fas fa-file-invoice"></i></button>
         <button class="btn btn-s btn-sm btn-ic" onclick="editC('${c.id}')" title="Editar"><i class="fas fa-edit"></i></button>
@@ -1568,18 +1674,20 @@ function filterC() {
     const q = document.getElementById('srch-c').value.toLowerCase();
     const est = document.getElementById('flt-est').value;
     const plazo = document.getElementById('flt-plazo').value;
+    const prod = document.getElementById('flt-prod').value;
     renderC(clientes.filter(c=>{
       const e = c.saldo===0?'liquidado':calcAlerta(c)==='ATRASADO'?'atrasado':'al_corriente';
       return (c.nombre||'').toLowerCase().includes(q)
         && (!est||e===est)
-        && (!plazo||String(c.nq)===plazo);
+        && (!plazo||String(c.nq)===plazo)
+        && (!prod||(c.producto||'quincenal_fijo')===prod);
     }));
   }, 180);
 }
 
-function calcVenc(inicio, nq) {
+function calcVenc(inicio, nq, producto = 'quincenal_fijo') {
   if (!inicio||!nq) return '—';
-  const d = getQDueDate(inicio, nq - 1);
+  const d = getQDueDate(inicio, nq - 1, producto);
   if (!d) return '—';
   return d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'});
 }
@@ -1647,7 +1755,9 @@ function renderCL() {
   const qKey = document.getElementById('qsel').value;
   // Calcular isPaid por adelantado para poder ordenar
   const activos = clientes
-    .filter(c => c.saldo > 0 || c.pagadas < c.nq)
+    // El checklist está organizado por quincena — el préstamo a 30 días no
+    // pertenece a ninguna en particular, se cobra desde Acreditados/Morosos
+    .filter(c => (c.saldo > 0 || c.pagadas < c.nq) && (c.producto||'quincenal_fijo') !== 'unico_30d')
     .map(c => ({...c, _isPaid: (() => { const h = historial.find(e => e.clienteId===c.id && e.qKey===qKey); return h?.accion === 'PAGO'; })() }))
     .sort((a, b) => {
       if (a._isPaid === b._isPaid) return 0;
@@ -1759,14 +1869,21 @@ function renderTF() {
     <td style="font-family:'DM Mono',monospace">${TF[m][12]?'$'+TF[m][12]:'<span class="badge bb">N/A</span>'}</td>
     <td><span class="badge bg">+${Math.round(((TF[m][6]*6-m)/m)*100)}%</span></td>
   </tr>`).join('');
+
+  const ms30 = Object.keys(TF30).map(Number).sort((a,b)=>a-b);
+  document.getElementById('tb-f30').innerHTML = ms30.map(m=>`<tr>
+    <td><strong style="font-family:'DM Mono',monospace">$${m.toLocaleString('es-MX')}</strong></td>
+    <td style="font-family:'DM Mono',monospace;color:var(--accent)">$${TF30[m].toLocaleString('es-MX')}</td>
+    <td><span class="badge bg">+${Math.round(((TF30[m]-m)/m)*100)}%</span></td>
+  </tr>`).join('');
 }
 
 /* ============================================================
    EXPORT / IMPORT
 ============================================================ */
 function doExport() {
-  const rows = [['#','Nombre','Monto','Pago Q','Plazo','Q Pagadas','Saldo','Estado'],
-    ...clientes.map((c,i)=>[i+1,c.nombre,c.monto,c.pq,c.nq+'Q',c.pagadas,c.saldo,
+  const rows = [['#','Nombre','Producto','Monto','Pago Q','Plazo','Q Pagadas','Saldo','Estado'],
+    ...clientes.map((c,i)=>[i+1,c.nombre,c.producto==='unico_30d'?'Préstamo 30 Días':'Quincenal',c.monto,c.pq,plazoLabel(c),c.pagadas,c.saldo,
       c.saldo===0?'Liquidado':calcAlerta(c)||'Al corriente'])];
   const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -1796,16 +1913,16 @@ function _generateXLSX() {
 
   // Hoja 1: Acreditados
   const ws1 = XLSX.utils.aoa_to_sheet([
-    ['#','Nombre','Monto','Pago Q','Plazo','Q Pagadas','Q Restantes','Saldo','Estado','Inicio','Teléfono','Notas'],
+    ['#','Nombre','Producto','Monto','Pago Q','Plazo','Q Pagadas','Q Restantes','Saldo','Estado','Inicio','Teléfono','Notas'],
     ...clientes.map((c, i) => [
-      i + 1, c.nombre, c.monto, c.pq, c.nq + 'Q',
+      i + 1, c.nombre, c.producto==='unico_30d'?'Préstamo 30 Días':'Quincenal', c.monto, c.pq, plazoLabel(c),
       c.pagadas, c.nq - c.pagadas, c.saldo,
       c.saldo === 0 ? 'Liquidado' : calcAlerta(c) === 'ATRASADO' ? 'Atrasado' : 'Al corriente',
       c.inicio || '', c.telefono || '', c.notas || ''
     ])
   ]);
   ws1['!cols'] = [
-    {wch:4},{wch:22},{wch:10},{wch:10},{wch:8},
+    {wch:4},{wch:22},{wch:16},{wch:10},{wch:10},{wch:8},
     {wch:10},{wch:12},{wch:12},{wch:14},{wch:12},{wch:14},{wch:22}
   ];
   XLSX.utils.book_append_sheet(wb, ws1, 'Acreditados');
@@ -1887,9 +2004,15 @@ function doImportJSON() {
 /* ============================================================
    MOROSOS Y RECARGOS
 ============================================================ */
-function getQDueDate(inicio, periodIdx) {
+function getQDueDate(inicio, periodIdx, producto = 'quincenal_fijo') {
   if (!inicio) return null;
   const start = new Date(inicio + 'T12:00:00');
+  if (producto === 'unico_30d') {
+    // Pago único: siempre el mismo vencimiento, 30 días naturales después del inicio
+    const due = new Date(start);
+    due.setDate(due.getDate() + 30);
+    return due;
+  }
   let d = new Date(start);
   if (d.getDate() < 15) {
     d.setDate(15);
@@ -1903,16 +2026,18 @@ function getQDueDate(inicio, periodIdx) {
 
 function calcRecargoPorCliente(c) {
   if (!c || !c.inicio || calcAlerta(c) !== 'ATRASADO') return { periodos: [], total: 0 };
-  const elapsed = Math.min(qsElapsed(c.inicio), c.nq);
+  const producto = c.producto || 'quincenal_fijo';
+  const porDia = RECARGO_DIA[producto] ?? 50;
+  const elapsed = Math.min(qsElapsed(c.inicio, producto), c.nq);
   const atrasadas = elapsed - c.pagadas;
   if (atrasadas <= 0) return { periodos: [], total: 0 };
   const today = new Date();
   const periodos = [];
   for (let i = c.pagadas; i < elapsed; i++) {
-    const dueDate = getQDueDate(c.inicio, i);
+    const dueDate = getQDueDate(c.inicio, i, producto);
     if (!dueDate) continue;
     const diasAtraso = Math.max(0, Math.floor((today - dueDate) / (1000 * 60 * 60 * 24)));
-    periodos.push({ idx: i + 1, dueDate, diasAtraso, recargo: diasAtraso * 50 });
+    periodos.push({ idx: i + 1, dueDate, diasAtraso, recargo: diasAtraso * porDia });
   }
   return { periodos, total: periodos.reduce((a, p) => a + p.recargo, 0) };
 }
@@ -1923,7 +2048,7 @@ function calcRecargoPorCliente(c) {
    recalculaba el saldo por separado y podían mostrar cifras distintas)
 ============================================================ */
 function resumenCliente(c) {
-  const elapsed = Math.min(qsElapsed(c.inicio), c.nq);
+  const elapsed = Math.min(qsElapsed(c.inicio, c.producto), c.nq);
   const atrasadas = Math.max(0, elapsed - c.pagadas);
   const capitalAt = atrasadas * c.pq;
   const faltantes = c.nq - c.pagadas;
@@ -1933,6 +2058,15 @@ function resumenCliente(c) {
   const esAtrasado = calcAlerta(c) === 'ATRASADO';
   const esLiquidado = saldo === 0;
   return { elapsed, atrasadas, capitalAt, faltantes, saldo, rec, totalCobrar, esAtrasado, esLiquidado };
+}
+
+// Etiqueta de plazo/periodos legible según producto — evita mostrar "1Q"
+// en un préstamo de pago único a 30 días
+function plazoLabel(c) {
+  return c.producto === 'unico_30d' ? 'Pago único' : `${c.nq}Q`;
+}
+function periodosLabel(n, c) {
+  return c.producto === 'unico_30d' ? (n > 0 ? 'Vencido' : 'Al corriente') : `${n}Q`;
 }
 
 function switchMorososTab(tab) {
@@ -1947,7 +2081,7 @@ function renderMorosos() {
   if (nbMor) { nbMor.textContent = morosos.length; nbMor.style.display = morosos.length ? '' : 'none'; }
 
   const totalCapital = morosos.reduce((a, c) => {
-    const elapsed = Math.min(qsElapsed(c.inicio||''), c.nq||0);
+    const elapsed = Math.min(qsElapsed(c.inicio||'', c.producto), c.nq||0);
     return a + Math.max(0, elapsed - (c.pagadas||0)) * (c.pq||0);
   }, 0);
   const totalRecargos = morosos.reduce((a, c) => a + calcRecargoPorCliente(c).total, 0);
@@ -1965,16 +2099,16 @@ function renderMorosos() {
     tb1.innerHTML = !morosos.length
       ? '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">✅ Sin pagos atrasados</td></tr>'
       : morosos.map(c => {
-          const elapsed = Math.min(qsElapsed(c.inicio), c.nq);
+          const elapsed = Math.min(qsElapsed(c.inicio, c.producto), c.nq);
           const atrasadas = Math.max(0, elapsed - c.pagadas);
           const capitalAt = atrasadas * c.pq;
-          const firstDue = c.pagadas < elapsed ? getQDueDate(c.inicio, c.pagadas) : null;
+          const firstDue = c.pagadas < elapsed ? getQDueDate(c.inicio, c.pagadas, c.producto) : null;
           const firstDueLbl = firstDue
             ? firstDue.toLocaleDateString('es-MX', {day:'2-digit',month:'short',year:'2-digit'})
             : '—';
           return `<tr>
             <td><strong>${esc(c.nombre)}</strong></td>
-            <td><span class="badge br">${atrasadas}Q</span></td>
+            <td><span class="badge br">${periodosLabel(atrasadas, c)}</span></td>
             <td><span style="font-family:'DM Mono',monospace">$${c.pq.toLocaleString('es-MX')}</span></td>
             <td><span style="font-family:'DM Mono',monospace;color:var(--danger)">$${capitalAt.toLocaleString('es-MX')}</span></td>
             <td><span style="font-family:'DM Mono',monospace;font-size:.76rem;color:var(--muted)">${firstDueLbl}</span></td>
@@ -1992,7 +2126,7 @@ function renderMorosos() {
     tb2.innerHTML = !morosos.length
       ? '<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted)">✅ Sin recargos</td></tr>'
       : morosos.map(c => {
-          const elapsed = Math.min(qsElapsed(c.inicio), c.nq);
+          const elapsed = Math.min(qsElapsed(c.inicio, c.producto), c.nq);
           const atrasadas = Math.max(0, elapsed - c.pagadas);
           const capitalAt = atrasadas * c.pq;
           const rec = calcRecargoPorCliente(c);
@@ -2002,7 +2136,7 @@ function renderMorosos() {
           ).join('<br>');
           return `<tr>
             <td><strong>${esc(c.nombre)}</strong></td>
-            <td><span class="badge br">${atrasadas}Q</span></td>
+            <td><span class="badge br">${periodosLabel(atrasadas, c)}</span></td>
             <td style="font-family:'DM Mono',monospace;font-size:.74rem;color:var(--muted);line-height:1.6">${desglose || '—'}</td>
             <td><span style="font-family:'DM Mono',monospace;color:var(--warn);font-weight:700">+$${rec.total.toLocaleString('es-MX')}</span></td>
             <td><span style="font-family:'DM Mono',monospace;color:var(--danger)">$${capitalAt.toLocaleString('es-MX')}</span></td>
@@ -2157,6 +2291,7 @@ function init(){
 
 // Expose globals
 window.openNew=openNew; window.editC=editC; window.saveC=saveC;
+window.onProductoChange=onProductoChange;
 window.calcPQ=calcPQ; window.confirmDel=confirmDel;
 window.togglePago=togglePago; window.openEC=openEC; window.sendEC=sendEC;
 window.waCliente=waCliente; window.waAll=waAll;
