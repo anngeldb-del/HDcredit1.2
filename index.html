@@ -779,40 +779,22 @@ function loadFirebaseSDK(cfg) {
     });
 }
 
+// Sin login: todos los dispositivos comparten la misma ruta de datos
+// (usuarios/compartido/...), protegida solo por reglas de Firestore abiertas
+const UID_COMPARTIDO = 'compartido';
+
 function initFB(cfg) {
   try {
     if (!firebase.apps.length) firebase.initializeApp(cfg);
     DB = firebase.firestore();
-    AUTH = firebase.auth();
     USE_FB = true;
     document.getElementById('fb-cfg').style.display = 'none';
-    // Recoge el resultado si venimos de vuelta de signInWithRedirect
-    AUTH.getRedirectResult().catch(e => {
-      console.error('HD Crédit — error de inicio de sesión (redirect):', e);
-      toast('No se pudo iniciar sesión: ' + e.message, 'err');
-    });
-    if (_authUnsub) _authUnsub();
-    _authUnsub = AUTH.onAuthStateChanged(user => {
-      if (user) {
-        CURRENT_UID = user.uid;
-        document.getElementById('fb-login').style.display = 'none';
-        document.getElementById('sync-lbl').textContent = '🟢 ' + (user.displayName || user.email || 'Sesión activa');
-        document.getElementById('sync-lbl').style.color = 'var(--accent)';
-        document.getElementById('sb-avatar').textContent = ((user.displayName || user.email || 'H')[0] || 'H').toUpperCase();
-        document.getElementById('ui-name').textContent = user.displayName || user.email || 'HD Crédit';
-        document.getElementById('btn-logout').style.display = 'flex';
-        toast('Firebase conectado ✅', 'ok');
-        startFBSync();
-      } else {
-        CURRENT_UID = null;
-        if (_unsubClientes) { _unsubClientes(); _unsubClientes = null; }
-        if (_unsubHistorial) { _unsubHistorial(); _unsubHistorial = null; }
-        document.getElementById('btn-logout').style.display = 'none';
-        document.getElementById('sync-lbl').textContent = '○ Sin sesión';
-        document.getElementById('sync-lbl').style.color = 'var(--muted)';
-        document.getElementById('fb-login').style.display = 'flex';
-      }
-    });
+    document.getElementById('fb-login').style.display = 'none';
+    CURRENT_UID = UID_COMPARTIDO;
+    document.getElementById('sync-lbl').textContent = '🟢 Sincronizado';
+    document.getElementById('sync-lbl').style.color = 'var(--accent)';
+    document.getElementById('btn-logout').style.display = 'none';
+    startFBSync();
   } catch(e) {
     console.error(e);
     toast('Error Firebase: ' + e.message, 'err');
