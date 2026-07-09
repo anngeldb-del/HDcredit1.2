@@ -2,71 +2,38 @@
 
 Sistema de control de pagos quincenal HD Crédit — PWA de archivo único (`index.html`), con sincronización opcional en Firebase/Firestore o almacenamiento solo local.
 
-## Seguridad — inicio de sesión obligatorio con Firebase
+## Sincronización sin inicio de sesión
 
-A partir de esta actualización, la sincronización en la nube requiere iniciar sesión con Google. Antes, las reglas de Firestore recomendadas dejaban la base de datos abierta a cualquiera en internet (`allow read, write: if true`); ahora cada acreditado y cada movimiento quedan protegidos por cuenta (`usuarios/{uid}/...`).
+Por decisión explícita del dueño de los datos, esta app **ya no pide iniciar sesión con Google**. Todos los dispositivos leen y escriben la misma ruta compartida en Firestore (`usuarios/compartido/...`), protegida únicamente por las reglas del proyecto — no hay control de acceso por cuenta.
 
-**Si nunca has usado Firebase con esta app (instalación nueva):** sigue los pasos que aparecen en la propia pantalla de configuración inicial de la app (botón "Firebase" en el menú). Ya incluyen crear el proyecto, habilitar el proveedor Google en Authentication, y pegar las reglas correctas.
+**Importante:** con esto, cualquier persona que conozca la configuración de Firebase de este proyecto puede leer y editar los datos. Se optó por esto deliberadamente para evitar los problemas de inicio de sesión (antivirus bloqueando el dominio de Firebase en PC, ventanas emergentes que no completaban el login en el celular). Si en algún momento se quiere recuperar la protección por cuenta, se puede reactivar el flujo de login que ya existía antes de este cambio.
 
-**Si ya usabas HD Crédit conectado a Firebase antes de esta actualización**, tus datos siguen en las colecciones antiguas (`/clientes`, `/historial`, sin dueño). Sigue este orden exacto para no perder nada:
+### Si vienes de una versión anterior con login obligatorio
 
-### 1. Habilita el inicio de sesión con Google
-En Firebase Console → tu proyecto → **Authentication** → pestaña **Sign-in method** → habilita **Google**.
+Tus datos actuales viven en `usuarios/{tu-uid-de-Google}/...`. Sigue este orden para no perder nada:
 
-### 2. Aplica las reglas de TRANSICIÓN
-En Firestore → **Reglas**, pega temporalmente:
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /clientes/{document=**} {
-      allow read: if request.auth != null;
-      allow write: if false;
-    }
-    match /historial/{document=**} {
-      allow read: if request.auth != null;
-      allow write: if false;
-    }
-    match /usuarios/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-  }
-}
-```
-
-Esto permite leer (no escribir) las colecciones antiguas mientras migras, y protege ya la nueva ruta por cuenta.
-
-### 3. Abre la app principal e inicia sesión
-Abre `index.html`, inicia sesión con tu cuenta de Google. Verás la app vacía — es normal, tus datos aún están en la ruta antigua.
-
-### 4. Ejecuta la migración una sola vez
-Abre `migrar.html` en el mismo navegador, inicia sesión con la **misma cuenta de Google**, y pulsa **Iniciar migración**. Copia tus acreditados e historial a `usuarios/{tu-uid}/...` conservando los mismos IDs (no rompe las referencias entre historial y acreditados).
-
-### 5. Verifica
-Vuelve a `index.html` y confirma que tu cartera completa aparece correctamente (acreditados, saldos, historial).
-
-### 6. Cierra las colecciones antiguas
-Una vez verificado, reemplaza las reglas por las **finales**:
+1. **Abre `migrar-compartido.html`** en el mismo navegador donde ya usabas la app (para que cargue tu configuración de Firebase guardada).
+2. **Inicia sesión con la misma cuenta de Google** que usabas antes.
+3. Pulsa **"Copiar mis datos a modo sin login"**. Copia (no borra el original) tus acreditados e historial a la ruta compartida `usuarios/compartido/...`.
+4. En Firebase Console → tu proyecto → **Firestore Database → Reglas**, pega las reglas abiertas:
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /clientes/{document=**} { allow read, write: if false; }
-    match /historial/{document=**} { allow read, write: if false; }
-    match /usuarios/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    match /usuarios/{document=**} {
+      allow read, write: if true;
     }
   }
 }
 ```
 
-Estos son los mismos pasos manuales en Firebase Console que no se pueden aplicar desde el código — solo tú, con acceso a tu proyecto, puedes ejecutarlos.
+5. Abre `index.html` normalmente — ya no pedirá iniciar sesión, en ningún dispositivo.
 
 ## Correcciones incluidas en esta actualización
 
-- Autenticación con Google + reglas de Firestore por cuenta (ver arriba).
+- Se quitó el inicio de sesión obligatorio (ver arriba) — decisión explícita para evitar bloqueos de login en algunos dispositivos/redes.
+- Corregido: la app se quedaba cargando indefinidamente si la red iba lenta al cargar el SDK de Firebase (ahora carga en paralelo con límite de espera de 10s).
 - Corregido: eliminar el último acreditado o movimiento sincronizado ya no dejaba la pantalla con datos obsoletos.
 - Corregido: los campos del historial ahora se escapan al mostrarse (previene HTML/scripts inyectados).
 - Corregido: el saldo y el estado de un acreditado se calculan en un solo lugar (`resumenCliente()`), en vez de recalcularse de forma distinta en Reporte Personal y Estado de Cuenta.
