@@ -735,23 +735,48 @@ function loadFirebaseSDK(cfg) {
   // No reinyectar los <script> del SDK si ya están cargados (evita duplicados
   // al reconectar Firebase más de una vez en la misma sesión)
   if (window.firebase && typeof firebase.auth === 'function') { initFB(cfg); return; }
-  const srcs = [
-    'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
-    'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js',
-    'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js'
-  ];
-  let i = 0;
-  function loadNext() {
-    if (i >= srcs.length) { initFB(cfg); return; }
-    const src = srcs[i++];
-    if (document.querySelector(`script[src="${src}"]`)) { loadNext(); return; }
-    const s = document.createElement('script');
-    s.src = src;
-    s.onerror = () => { toast('No se pudo cargar Firebase SDK. Usando modo local.', 'err'); goLocal(); };
-    s.onload = loadNext;
-    document.head.appendChild(s);
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
   }
-  loadNext();
+
+  let settled = false;
+  // Si la red va lenta o se traba, no dejar la app esperando indefinidamente:
+  // a los 10s se cae a modo local en vez de quedarse en blanco
+  const timeoutId = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    toast('Firebase tardó demasiado en responder. Usando modo local.', 'err');
+    goLocal();
+  }, 10000);
+
+  // firestore-compat y auth-compat solo dependen de app-compat, no entre sí:
+  // se cargan en paralelo en vez de uno detrás del otro
+  loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js')
+    .then(() => Promise.all([
+      loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js'),
+      loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js')
+    ]))
+    .then(() => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      initFB(cfg);
+    })
+    .catch(() => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      toast('No se pudo cargar Firebase SDK. Usando modo local.', 'err');
+      goLocal();
+    });
 }
 
 function initFB(cfg) {
