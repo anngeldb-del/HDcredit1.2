@@ -798,9 +798,18 @@ function initFB(cfg) {
 function loginGoogle() {
   if (!AUTH) return;
   const provider = new firebase.auth.GoogleAuthProvider();
-  // signInWithRedirect en vez de signInWithPopup: las apps instaladas
-  // (modo standalone/PWA) suelen bloquear o romper el flujo de popup
-  AUTH.signInWithRedirect(provider).catch(e => toast('No se pudo iniciar sesión: ' + e.message, 'err'));
+  // Ventana emergente primero (funciona bien en la mayoría de navegadores y
+  // en la app instalada en el celular); si el navegador la bloquea o no la
+  // soporta, caemos a redirección como respaldo automático — sin esto,
+  // algunos navegadores/PWAs quedan en un ciclo de login que nunca completa
+  AUTH.signInWithPopup(provider).catch(e => {
+    const necesitaRedirect = ['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment', 'auth/cancelled-popup-request'].includes(e.code);
+    if (necesitaRedirect) {
+      AUTH.signInWithRedirect(provider).catch(e2 => toast('No se pudo iniciar sesión: ' + e2.message, 'err'));
+    } else if (e.code !== 'auth/popup-closed-by-user') {
+      toast('No se pudo iniciar sesión: ' + e.message, 'err');
+    }
+  });
 }
 
 function logoutFB() {
