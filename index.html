@@ -791,9 +791,17 @@ function initFB(cfg) {
     document.getElementById('fb-cfg').style.display = 'none';
     document.getElementById('fb-login').style.display = 'none';
     CURRENT_UID = UID_COMPARTIDO;
-    document.getElementById('sync-lbl').textContent = '🟢 Sincronizado';
-    document.getElementById('sync-lbl').style.color = 'var(--accent)';
     document.getElementById('btn-logout').style.display = 'none';
+    // Persistencia offline: la app sigue funcionando sin internet (lee de la
+    // copia local en el dispositivo) y los cobros que se hagan sin conexión
+    // se guardan en cola y se suben solos en cuanto vuelve la señal
+    DB.enablePersistence({synchronizeTabs: true}).catch(e => {
+      console.warn('HD Crédit — persistencia offline no disponible:', e.code);
+    });
+    // El estado real (sincronizado / local / subiendo) lo decide startFBSync()
+    // a partir de snap.metadata, que refleja la conexión real con Firestore
+    // (más confiable que navigator.onLine, que solo mira la red del dispositivo)
+    setSyncLbl(navigator.onLine ? 'ok' : 'local');
     startFBSync();
   } catch(e) {
     console.error(e);
@@ -829,11 +837,21 @@ function logoutFB() {
 function CLI() { return DB.collection('usuarios').doc(CURRENT_UID).collection('clientes'); }
 function HIST() { return DB.collection('usuarios').doc(CURRENT_UID).collection('historial'); }
 
+function setSyncLbl(estado) {
+  const el = document.getElementById('sync-lbl');
+  if (!el) return;
+  if (estado === 'local') { el.textContent = '🟡 Sin internet — guardando en el dispositivo'; el.style.color = 'var(--warn)'; }
+  else if (estado === 'pendiente') { el.textContent = '🟡 Cambios guardados — subiendo…'; el.style.color = 'var(--warn)'; }
+  else if (estado === 'error') { el.textContent = '🔴 Desconectado — reintentando…'; el.style.color = 'var(--danger)'; }
+  else { el.textContent = '🟢 Sincronizado'; el.style.color = 'var(--accent)'; }
+}
+
 function startFBSync() {
   // Cancelar listeners anteriores para evitar duplicados si se reconecta
   if (_unsubClientes) { _unsubClientes(); _unsubClientes = null; }
   if (_unsubHistorial) { _unsubHistorial(); _unsubHistorial = null; }
-  _unsubClientes = CLI().orderBy('createdAt').onSnapshot(snap => {
+  let _errToastAt = 0;
+  _unsubClientes = CLI().orderBy('createdAt').onSnapshot({includeMetadataChanges: true}, snap => {
     // Se confía siempre en el snapshot (incluye listas vacías reales, p.ej.
     // al eliminar el último acreditado) — antes se descartaba ese caso y la
     // pantalla quedaba con datos obsoletos
@@ -841,9 +859,15 @@ function startFBSync() {
     syncAlertas();
     localStorage.setItem('hd_c', JSON.stringify(clientes));
     refresh();
+    // metadata.fromCache: se está mostrando la copia local (sin red);
+    // metadata.hasPendingWrites: hay cobros hechos aquí que aún no suben
+    if (snap.metadata.fromCache) setSyncLbl('local');
+    else if (snap.metadata.hasPendingWrites) setSyncLbl('pendiente');
+    else setSyncLbl('ok');
   }, err => {
     console.error('HD Crédit — error de sincronización (clientes):', err);
-    toast('Error de sincronización: ' + err.message, 'err');
+    setSyncLbl('error');
+    if (Date.now() - _errToastAt > 30000) { _errToastAt = Date.now(); toast('Error de sincronización: ' + err.message, 'err'); }
   });
   _unsubHistorial = HIST().orderBy('ts', 'desc').limit(500).onSnapshot(snap => {
     historial = snap.docs.map(d => ({id: d.id, ...d.data()}));
@@ -853,7 +877,7 @@ function startFBSync() {
     renderDash();
   }, err => {
     console.error('HD Crédit — error de sincronización (historial):', err);
-    toast('Error de sincronización: ' + err.message, 'err');
+    if (Date.now() - _errToastAt > 30000) { _errToastAt = Date.now(); toast('Error de sincronización: ' + err.message, 'err'); }
   });
 }
 
@@ -889,6 +913,7 @@ function loadLocal() {
         const bk = JSON.parse(localStorage.getItem(bkKey) || 'null');
         if (bk && Array.isArray(bk.clientes) && bk.clientes.length) {
           clientes = bk.clientes;
+          if (!historial.length && Array.isArray(bk.historial)) historial = bk.historial;
           toast('Datos recuperados del respaldo automático (' + new Date(bk.ts).toLocaleDateString() + ') ✅', 'ok');
           break;
         }
@@ -1049,7 +1074,7 @@ function autoBackup() {
   if (!clientes.length) return;
   try {
     localStorage.setItem('hd_bk_1', localStorage.getItem('hd_bk_0') || '');
-    localStorage.setItem('hd_bk_0', JSON.stringify({ clientes, ts: new Date().toISOString() }));
+    localStorage.setItem('hd_bk_0', JSON.stringify({ clientes, historial, ts: new Date().toISOString() }));
   } catch(e) { /* cuota llena — ignorar */ }
 }
 
@@ -1221,25 +1246,31 @@ async function delC(id) {
 ============================================================ */
 async function togglePago(cid, qIdx) {
   const c = clientes.find(x=>x.id===cid); if(!c) return;
-  const pagos = [...(c.pagos||Array(c.nq||12).fill(false))];
-  pagos[qIdx] = !pagos[qIdx];
-  const pagadas = pagos.filter(Boolean).length;
-  const saldo = Math.max(0, (c.nq - pagadas) * c.pq);
   const now = new Date();
   const qKey = document.getElementById('qsel').value;
+  let pagos, pagadas, saldo, alerta;
 
-  const log = {
-    id: 'h_' + Date.now(), clienteId: cid, nombre: c.nombre,
-    monto: c.pq, qIndex: qIdx, qKey,
-    accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
-    fecha: now.toLocaleDateString('es-MX'),
-    hora: now.toLocaleTimeString('es-MX'),
-    ts: now.toISOString()
-  };
-
-  const alerta = calcAlerta({...c, pagadas, saldo});
   if (USE_FB) {
     try {
+      // Trae la versión más reciente conocida del acreditado (server si hay
+      // red, cache local si no) antes de calcular el nuevo estado — reduce el
+      // riesgo de que dos dispositivos cobrando casi al mismo tiempo se pisen
+      // el arreglo de pagos entre sí
+      const freshSnap = await CLI().doc(cid).get();
+      const freshData = freshSnap.exists ? freshSnap.data() : c;
+      pagos = [...(freshData.pagos||Array(c.nq||12).fill(false))];
+      pagos[qIdx] = !pagos[qIdx];
+      pagadas = pagos.filter(Boolean).length;
+      saldo = Math.max(0, (c.nq - pagadas) * c.pq);
+      alerta = calcAlerta({...c, pagadas, saldo});
+      const log = {
+        id: 'h_' + Date.now(), clienteId: cid, nombre: c.nombre,
+        monto: c.pq, qIndex: qIdx, qKey,
+        accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
+        fecha: now.toLocaleDateString('es-MX'),
+        hora: now.toLocaleTimeString('es-MX'),
+        ts: now.toISOString()
+      };
       await CLI().doc(cid).set({pagos, pagadas, saldo, alerta, updatedAt: now.toISOString()}, {merge:true});
       await HIST().doc(log.id).set(log);
     } catch(e) {
@@ -1247,6 +1278,19 @@ async function togglePago(cid, qIdx) {
       return;
     }
   } else {
+    pagos = [...(c.pagos||Array(c.nq||12).fill(false))];
+    pagos[qIdx] = !pagos[qIdx];
+    pagadas = pagos.filter(Boolean).length;
+    saldo = Math.max(0, (c.nq - pagadas) * c.pq);
+    alerta = calcAlerta({...c, pagadas, saldo});
+    const log = {
+      id: 'h_' + Date.now(), clienteId: cid, nombre: c.nombre,
+      monto: c.pq, qIndex: qIdx, qKey,
+      accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
+      fecha: now.toLocaleDateString('es-MX'),
+      hora: now.toLocaleTimeString('es-MX'),
+      ts: now.toISOString()
+    };
     const i = clientes.findIndex(x=>x.id===cid);
     clientes[i] = {...clientes[i], pagos, pagadas, saldo, alerta};
     historial.unshift(log);
@@ -1656,7 +1700,7 @@ function renderC(list) {
     const fv = calcVenc(c.inicio, c.nq, c.producto);
     const iniLabel = c.inicio ? new Date(c.inicio+'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
     const elapsed = c.inicio ? qsElapsed(c.inicio, c.producto) : 0;
-    const iniTitle = c.inicio ? `Inicio: ${c.inicio} | Q esperadas: ${Math.min(elapsed,c.nq)} | Q pagadas: ${c.pagadas||0}` : 'Sin fecha de inicio';
+    const iniTitle = c.inicio ? esc(`Inicio: ${c.inicio} | Q esperadas: ${Math.min(elapsed,c.nq)} | Q pagadas: ${c.pagadas||0}`).replace(/"/g,'&quot;') : 'Sin fecha de inicio';
     return `<tr>
       <td><span style="font-family:'DM Mono',monospace;color:var(--muted)">${String(i+1).padStart(2,'0')}</span></td>
       <td><strong>${esc(c.nombre||'—')}</strong>${badgeNuevo}</td>
