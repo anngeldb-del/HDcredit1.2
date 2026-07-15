@@ -308,10 +308,9 @@ tbody tr:last-child td{border-bottom:none}
     <div class="cfg-steps">
       <div class="cstep"><div class="csn">1</div><div>Ve a <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> y crea un proyecto (sin Google Analytics).</div></div>
       <div class="cstep"><div class="csn">2</div><div>En el proyecto → <strong>Firestore Database</strong> → Crear base de datos → Modo producción.</div></div>
-      <div class="cstep"><div class="csn">3</div><div><strong>Authentication</strong> → pestaña Sign-in method → habilita el proveedor <strong>Google</strong>.</div></div>
-      <div class="cstep"><div class="csn">4</div><div>Firestore → pestaña <strong>Reglas</strong> → reemplaza todo con:<br><code style="color:var(--accent);font-size:.75rem">rules_version='2'; service cloud.firestore { match /databases/{database}/documents { match /usuarios/{uid}/{document=**} { allow read, write: if request.auth != null && request.auth.uid == uid; } } }</code><br><span style="color:var(--muted);font-size:.73rem">Cada acreditado y cada movimiento quedan protegidos por tu cuenta de Google — nadie más puede leerlos ni escribirlos.</span></div></div>
-      <div class="cstep"><div class="csn">5</div><div>Configuración del proyecto ⚙️ → <strong>Agregar app</strong> → Web (&lt;/&gt;) → copia el objeto <code style="color:var(--accent)">firebaseConfig</code>.</div></div>
-      <div class="cstep"><div class="csn">6</div><div>Pega el JSON abajo, toca <strong>Conectar Firebase</strong> e inicia sesión con Google.</div></div>
+      <div class="cstep"><div class="csn">3</div><div>Firestore → pestaña <strong>Reglas</strong> → reemplaza todo con:<br><code style="color:var(--accent);font-size:.75rem">rules_version='2'; service cloud.firestore { match /databases/{database}/documents { match /usuarios/{document=**} { allow read, write: if true; } } }</code><br><span style="color:var(--muted);font-size:.73rem">Sin inicio de sesión: todos los dispositivos comparten la misma ruta de datos. Cualquiera con esta configuración puede leerlos y escribirlos.</span></div></div>
+      <div class="cstep"><div class="csn">4</div><div>Configuración del proyecto ⚙️ → <strong>Agregar app</strong> → Web (&lt;/&gt;) → copia el objeto <code style="color:var(--accent)">firebaseConfig</code>.</div></div>
+      <div class="cstep"><div class="csn">5</div><div>Pega el JSON abajo y toca <strong>Conectar Firebase</strong>.</div></div>
     </div>
     <div class="fg">
       <label>firebaseConfig JSON</label>
@@ -322,19 +321,6 @@ tbody tr:last-child td{border-bottom:none}
       <button class="btn btn-s" onclick="goLocal()"><i class="fas fa-laptop"></i> Solo local (este dispositivo)</button>
     </div>
     <p style="font-size:.73rem;color:var(--muted);margin-top:10px">Modo local: datos guardados en este navegador. No se sincronizan entre dispositivos.</p>
-  </div>
-</div>
-
-<!-- FIREBASE LOGIN -->
-<div id="fb-login" style="position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:6000;padding:20px">
-  <div class="cfg-box" style="text-align:center">
-    <div class="cfg-logo">HD Crédit</div>
-    <div style="font-family:'DM Mono',monospace;font-size:.7rem;color:var(--muted);margin-bottom:12px">INICIAR SESIÓN</div>
-    <p class="cfg-desc">Tus acreditados están protegidos por cuenta. Inicia sesión con Google para ver y sincronizar tu cartera.</p>
-    <button class="btn btn-p" style="width:100%;justify-content:center" onclick="loginGoogle()"><i class="fab fa-google"></i> Iniciar sesión con Google</button>
-    <p style="font-size:.73rem;color:var(--muted);margin-top:14px">¿Ya usabas HD Crédit antes de este cambio? Después de iniciar sesión aquí, abre <code style="color:var(--accent)">migrar.html</code> una sola vez para copiar tus datos anteriores a tu cuenta.</p>
-    <button class="btn btn-s" style="width:100%;justify-content:center;margin-top:14px" onclick="goLocal()"><i class="fas fa-laptop"></i> Usar datos guardados en este dispositivo</button>
-    <p style="font-size:.71rem;color:var(--muted);margin-top:8px">Úsalo solo si el login no funciona por ahora: abre la última copia guardada en este dispositivo (sin sincronizar) para que puedas seguir cobrando mientras se resuelve.</p>
   </div>
 </div>
 
@@ -374,7 +360,6 @@ tbody tr:last-child td{border-bottom:none}
       <div class="ui-name" id="ui-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">HD Crédit</div>
       <div class="ui-role" id="sync-lbl">● Local</div>
     </div>
-    <button class="btn-x" id="btn-logout" onclick="logoutFB()" title="Cerrar sesión" style="display:none;flex-shrink:0"><i class="fas fa-sign-out-alt"></i></button>
   </div>
 </nav>
 
@@ -701,10 +686,10 @@ const RECARGO_DIA = { quincenal_fijo: 50, unico_30d: 100 };
 /* ============================================================
    STATE
 ============================================================ */
-let DB = null, AUTH = null, USE_FB = false, CURRENT_UID = null;
+let DB = null, USE_FB = false, CURRENT_UID = null;
 let clientes = [], historial = [];
 let _pendingPago = {}, _pendingOrigHtml = {}, _lastPago = null, _undoing = false;
-let _unsubClientes = null, _unsubHistorial = null, _authUnsub = null;
+let _unsubClientes = null, _unsubHistorial = null;
 
 /* ============================================================
    FIREBASE (lazy load)
@@ -734,7 +719,7 @@ function connectFirebase() {
 function loadFirebaseSDK(cfg) {
   // No reinyectar los <script> del SDK si ya están cargados (evita duplicados
   // al reconectar Firebase más de una vez en la misma sesión)
-  if (window.firebase && typeof firebase.auth === 'function') { initFB(cfg); return; }
+  if (window.firebase && typeof firebase.firestore === 'function') { initFB(cfg); return; }
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -757,13 +742,9 @@ function loadFirebaseSDK(cfg) {
     goLocal();
   }, 10000);
 
-  // firestore-compat y auth-compat solo dependen de app-compat, no entre sí:
-  // se cargan en paralelo en vez de uno detrás del otro
+  // Sin login: ya no se carga el SDK de Auth, solo app + firestore
   loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js')
-    .then(() => Promise.all([
-      loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js'),
-      loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js')
-    ]))
+    .then(() => loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js'))
     .then(() => {
       if (settled) return;
       settled = true;
@@ -789,9 +770,7 @@ function initFB(cfg) {
     DB = firebase.firestore();
     USE_FB = true;
     document.getElementById('fb-cfg').style.display = 'none';
-    document.getElementById('fb-login').style.display = 'none';
     CURRENT_UID = UID_COMPARTIDO;
-    document.getElementById('btn-logout').style.display = 'none';
     // Persistencia offline: la app sigue funcionando sin internet (lee de la
     // copia local en el dispositivo) y los cobros que se hagan sin conexión
     // se guardan en cola y se suben solos en cuanto vuelve la señal
@@ -810,30 +789,7 @@ function initFB(cfg) {
   }
 }
 
-function loginGoogle() {
-  if (!AUTH) return;
-  const provider = new firebase.auth.GoogleAuthProvider();
-  // Ventana emergente primero (funciona bien en la mayoría de navegadores y
-  // en la app instalada en el celular); si el navegador la bloquea o no la
-  // soporta, caemos a redirección como respaldo automático — sin esto,
-  // algunos navegadores/PWAs quedan en un ciclo de login que nunca completa
-  AUTH.signInWithPopup(provider).catch(e => {
-    const necesitaRedirect = ['auth/popup-blocked', 'auth/operation-not-supported-in-this-environment', 'auth/cancelled-popup-request'].includes(e.code);
-    if (necesitaRedirect) {
-      AUTH.signInWithRedirect(provider).catch(e2 => toast('No se pudo iniciar sesión: ' + e2.message, 'err'));
-    } else if (e.code !== 'auth/popup-closed-by-user') {
-      toast('No se pudo iniciar sesión: ' + e.message, 'err');
-    }
-  });
-}
-
-function logoutFB() {
-  if (!AUTH) return;
-  AUTH.signOut();
-}
-
-// Colecciones con alcance por usuario autenticado — reemplaza las rutas
-// planas /clientes y /historial (abiertas a cualquiera) usadas antes de Auth
+// Rutas de datos: usuarios/compartido/... (sin login, ver UID_COMPARTIDO arriba)
 function CLI() { return DB.collection('usuarios').doc(CURRENT_UID).collection('clientes'); }
 function HIST() { return DB.collection('usuarios').doc(CURRENT_UID).collection('historial'); }
 
@@ -2359,7 +2315,6 @@ window.filterC=filterC; window.filterH=filterH;
 window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
 window.doExport=doExport; window.doExportXLSX=doExportXLSX; window.doExportJSON=doExportJSON; window.doImportJSON=doImportJSON;
 window.connectFirebase=connectFirebase; window.goLocal=goLocal;
-window.loginGoogle=loginGoogle; window.logoutFB=logoutFB;
 window.om=om; window.cm=cm;
 window.initPago=initPago; window.undoLastPago=undoLastPago;
 window.switchMorososTab=switchMorososTab; window.renderMorosos=renderMorosos;
