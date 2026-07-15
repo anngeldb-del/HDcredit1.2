@@ -6,33 +6,19 @@ Sistema de control de pagos quincenal HD Crédit — PWA de archivo único (`ind
 
 Por decisión explícita del dueño de los datos, esta app **ya no pide iniciar sesión con Google**. Todos los dispositivos leen y escriben la misma ruta compartida en Firestore (`usuarios/compartido/...`), protegida únicamente por las reglas del proyecto — no hay control de acceso por cuenta.
 
-**Importante:** con esto, cualquier persona que conozca la configuración de Firebase de este proyecto puede leer y editar los datos. Se optó por esto deliberadamente para evitar los problemas de inicio de sesión (antivirus bloqueando el dominio de Firebase en PC, ventanas emergentes que no completaban el login en el celular). Si en algún momento se quiere recuperar la protección por cuenta, se puede reactivar el flujo de login que ya existía antes de este cambio.
+**Importante:** con esto, cualquier persona que conozca la configuración de Firebase de este proyecto puede leer y editar los datos. Se optó por esto deliberadamente para evitar los problemas de inicio de sesión (antivirus bloqueando el dominio de Firebase en PC, ventanas emergentes que no completaban el login en el celular). El código de Firebase Authentication (Google Sign-In) fue eliminado por completo del proyecto — no queda ningún rastro de esa integración.
 
-### Si vienes de una versión anterior con login obligatorio
+## Modo offline
 
-Tus datos actuales viven en `usuarios/{tu-uid-de-Google}/...`. Sigue este orden para no perder nada:
-
-1. **Abre `migrar-compartido.html`** en el mismo navegador donde ya usabas la app (para que cargue tu configuración de Firebase guardada).
-2. **Inicia sesión con la misma cuenta de Google** que usabas antes.
-3. Pulsa **"Copiar mis datos a modo sin login"**. Copia (no borra el original) tus acreditados e historial a la ruta compartida `usuarios/compartido/...`.
-4. En Firebase Console → tu proyecto → **Firestore Database → Reglas**, pega las reglas abiertas:
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /usuarios/{document=**} {
-      allow read, write: if true;
-    }
-  }
-}
-```
-
-5. Abre `index.html` normalmente — ya no pedirá iniciar sesión, en ningún dispositivo.
+La app funciona normalmente sin internet: lee la última copia conocida de los datos guardada en el dispositivo. Los cobros que se registren sin conexión se guardan en cola y se suben solos en cuanto vuelve la señal, sin que haya que hacer nada manualmente (persistencia offline nativa de Firestore).
 
 ## Correcciones incluidas en esta actualización
 
-- Se quitó el inicio de sesión obligatorio (ver arriba) — decisión explícita para evitar bloqueos de login en algunos dispositivos/redes.
+- Se activó la persistencia offline de Firestore — la app sigue funcionando sin internet y sincroniza sola al recuperar la señal.
+- Se redujo el riesgo de que dos dispositivos cobrando casi al mismo tiempo se pisen el registro de pagos entre sí.
+- Corregido un hueco de seguridad (XSS) en el tooltip de fecha de inicio de la tabla de Acreditados.
+- El respaldo automático ahora incluye el historial de pagos, no solo los acreditados.
+- El indicador de sincronización ahora refleja el estado real de conexión con Firestore, no solo si hay red en el dispositivo.
 - Corregido: la app se quedaba cargando indefinidamente si la red iba lenta al cargar el SDK de Firebase (ahora carga en paralelo con límite de espera de 10s).
 - Corregido: eliminar el último acreditado o movimiento sincronizado ya no dejaba la pantalla con datos obsoletos.
 - Corregido: los campos del historial ahora se escapan al mostrarse (previene HTML/scripts inyectados).
