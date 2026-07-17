@@ -921,6 +921,21 @@ function nextQBoundary(d) {
     ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
     : new Date(d.getFullYear(), d.getMonth() + 1, 15);
 }
+// Primer vencimiento de un préstamo quincenal: por defecto es el cierre de la
+// MISMA quincena en que inicia (15 o fin de mes), sin gracia extra de por medio.
+// Excepción: si ese cierre cae a menos de 5 días del inicio (p.ej. alguien que
+// empieza el día 30, con cierre al 31), se recorre al corte siguiente — así
+// nadie queda "atrasado" casi al día siguiente de recibir el préstamo.
+const DIAS_GRACIA_MINIMOS = 5;
+function primerVencimiento(start) {
+  let d = new Date(start);
+  d.getDate() < 15
+    ? d.setDate(15)
+    : (d = new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  const diasHastaCierre = Math.round((d - start) / 86400000);
+  if (diasHastaCierre < DIAS_GRACIA_MINIMOS) d = nextQBoundary(d);
+  return d;
+}
 function qsElapsed(inicio, producto = 'quincenal_fijo') {
   if (!inicio) return 0;
   const start = new Date(inicio + 'T12:00:00');
@@ -932,14 +947,7 @@ function qsElapsed(inicio, producto = 'quincenal_fijo') {
     due.setDate(due.getDate() + 30);
     return now >= due ? 1 : 0;
   }
-  let d = new Date(start);
-  // Avanzar al cierre de la quincena de inicio
-  d.getDate() < 15
-    ? d.setDate(15)
-    : (d = new Date(d.getFullYear(), d.getMonth() + 1, 0));
-  // El primer pago vence en la quincena SIGUIENTE a la del inicio
-  // (el cliente tiene una quincena completa de gracia antes del primer cobro)
-  d = nextQBoundary(d);
+  let d = primerVencimiento(start);
   let count = 0;
   while (d < now && count < 36) {
     count++;
@@ -1973,13 +1981,7 @@ function getQDueDate(inicio, periodIdx, producto = 'quincenal_fijo') {
     due.setDate(due.getDate() + 30);
     return due;
   }
-  let d = new Date(start);
-  if (d.getDate() < 15) {
-    d.setDate(15);
-  } else {
-    d = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  }
-  d = nextQBoundary(d);
+  let d = primerVencimiento(start);
   for (let i = 0; i < periodIdx; i++) d = nextQBoundary(d);
   return d;
 }
