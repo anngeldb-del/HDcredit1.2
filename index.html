@@ -89,7 +89,6 @@ select.fc option{background:var(--surface)}
 .btn-s:hover{background:var(--border2)}
 .btn-d{background:rgba(255,69,96,.12);color:var(--danger);border:1px solid rgba(255,69,96,.25)}
 .btn-d:hover{background:var(--danger);color:#fff}
-.btn-w{background:rgba(255,184,0,.12);color:var(--warn);border:1px solid rgba(255,184,0,.25)}
 .btn-wa{background:rgba(37,211,102,.12);color:#25d366;border:1px solid rgba(37,211,102,.25)}
 .btn-wa:hover{background:#25d366;color:#fff}
 .btn-sm{padding:6px 11px;font-size:.78rem}
@@ -890,73 +889,6 @@ function saveLocal() {
 }
 
 /* ============================================================
-   SEED DATA (from your Excel file)
-============================================================ */
-function xlDate(n) {
-  if (!n) return '';
-  const d = new Date(Math.round((n - 25569) * 86400 * 1000));
-  return d.toISOString().split('T')[0];
-}
-
-function seedData() {
-  const raw = [
-    {n:'IVON',m:8000,pq:1067,nq:12,ini:45976,pg:12,s:0,a:''},
-    {n:'E.NANCY',m:5000,pq:667,nq:12,ini:45976,pg:12,s:0,a:''},
-    {n:'YISEL',m:8000,pq:1200,nq:10,ini:46021,pg:10,s:0,a:''},
-    {n:'TREJO',m:6000,pq:800,nq:12,ini:46006,pg:12,s:0,a:''},
-    {n:'GABI',m:4000,pq:604,nq:10,ini:45991,pg:10,s:0,a:''},
-    {n:'H/TERE',m:5000,pq:751,nq:10,ini:46006,pg:10,s:0,a:''},
-    {n:'JOSE LUIS',m:5000,pq:900,nq:8,ini:46127,pg:2,s:5400,a:'ATRASADO'},
-    {n:'ANDREA',m:4000,pq:601,nq:10,ini:46037,pg:10,s:0,a:''},
-    {n:'SAHIRA',m:5000,pq:667,nq:12,ini:46037,pg:8,s:2668,a:'ATRASADO'},
-    {n:'SAM',m:8000,pq:1067,nq:12,ini:46037,pg:8,s:4268,a:'ATRASADO'},
-    {n:'JASIEL',m:10000,pq:1501,nq:10,ini:46052,pg:8,s:3002,a:''},
-    {n:'PERLA 12Q',m:12000,pq:1600,nq:12,ini:46052,pg:10,s:3200,a:''},
-    {n:'JESUS 71',m:5000,pq:751,nq:10,ini:46052,pg:7,s:2253,a:''},
-    {n:'LORENA',m:15000,pq:2001,nq:12,ini:46052,pg:7,s:10005,a:''},
-    {n:'ERIKA',m:15000,pq:2001,nq:12,ini:46068,pg:6,s:12006,a:'ATRASADO'},
-    {n:'VERONICA',m:5000,pq:751,nq:10,ini:46068,pg:7,s:2253,a:''},
-    {n:'ESTELA',m:5000,pq:667,nq:12,ini:46068,pg:6,s:4002,a:'ATRASADO'},
-    {n:'MARI TERE',m:3000,pq:650,nq:6,ini:46068,pg:5,s:650,a:'ATRASADO'},
-    {n:'DIOSDADO',m:10000,pq:1334,nq:12,ini:46068,pg:6,s:8004,a:'ATRASADO'},
-    {n:'JULIA',m:5000,pq:667,nq:12,ini:46081,pg:5,s:4669,a:'ATRASADO'},
-    {n:'VIVIANA',m:5000,pq:667,nq:12,ini:46081,pg:5,s:4669,a:'ATRASADO'},
-    {n:'PAULINA',m:5000,pq:751,nq:10,ini:46081,pg:4,s:4506,a:'ATRASADO'},
-    {n:'OLGA',m:2000,pq:467,nq:6,ini:46081,pg:5,s:467,a:'ATRASADO'},
-    {n:'JOSE LUIS 2',m:5000,pq:900,nq:8,ini:46096,pg:4,s:3600,a:'ATRASADO'},
-    {n:'GISEL',m:5000,pq:1083,nq:6,ini:46111,pg:3,s:3249,a:'ATRASADO'},
-    {n:'VANE',m:7000,pq:1050,nq:10,ini:46111,pg:3,s:7350,a:'ATRASADO'},
-    {n:'PERLA 7K',m:7000,pq:934,nq:12,ini:46111,pg:4,s:7472,a:''},
-    {n:'ROXANA',m:6000,pq:800,nq:12,ini:46127,pg:2,s:8000,a:'ATRASADO'},
-    {n:'E.NANCY 2',m:4000,pq:722,nq:8,ini:46127,pg:2,s:4332,a:'ATRASADO'},
-    {n:'JAZ',m:4000,pq:534,nq:12,ini:46127,pg:2,s:5340,a:'ATRASADO'},
-    {n:'YISEL 2',m:8000,pq:1200,nq:10,ini:46142,pg:1,s:10800,a:'ATRASADO'},
-    {n:'TERE',m:7000,pq:1264,nq:8,ini:46142,pg:1,s:8848,a:'ATRASADO'},
-    {n:'ABRIL',m:5000,pq:900,nq:8,ini:46142,pg:1,s:6300,a:'ATRASADO'},
-    {n:'JOSE LUIS 3',m:4000,pq:722,nq:8,ini:46143,pg:1,s:5054,a:'ATRASADO'},
-    {n:'ANGEL C.',m:15000,pq:2601,nq:8,ini:46143,pg:1,s:18207,a:'ATRASADO'},
-    {n:'MARI TERE 2',m:5000,pq:1083,nq:6,ini:46157,pg:0,s:6498,a:'ATRASADO'},
-    {n:'DANIEL',m:6000,pq:800,nq:12,ini:46157,pg:0,s:9600,a:'ATRASADO'},
-    {n:'LUISA',m:6000,pq:1300,nq:6,ini:46157,pg:0,s:7800,a:'ATRASADO'},
-    {n:'TREJO 2',m:8000,pq:1067,nq:12,ini:46172,pg:0,s:12804,a:''},
-    {n:'MAMA DE SAM',m:8000,pq:1067,nq:12,ini:46172,pg:0,s:12804,a:''},
-    {n:'ANDREA 2',m:6000,pq:800,nq:12,ini:46172,pg:0,s:9600,a:''},
-    {n:'NAYE',m:6000,pq:800,nq:12,ini:46172,pg:0,s:9600,a:''},
-    {n:'JESY',m:4000,pq:722,nq:8,ini:0,pg:0,s:5776,a:''},
-    {n:'H/TERE 2',m:6000,pq:900,nq:10,ini:46172,pg:0,s:9000,a:''},
-  ];
-  clientes = raw.map((r, i) => ({
-    id: 'c_' + i + '_' + Date.now(),
-    nombre: r.n, monto: r.m, pq: r.pq, nq: r.nq,
-    inicio: xlDate(r.ini), pagadas: r.pg, saldo: r.s,
-    alerta: r.a, telefono: '', notas: '',
-    pagos: Array(r.nq).fill(false).map((_,j) => j < r.pg),
-    createdAt: new Date().toISOString()
-  }));
-  saveLocal();
-}
-
-/* ============================================================
    QUINCENA UTILS
 ============================================================ */
 function getQuincenas(n) {
@@ -1200,10 +1132,22 @@ async function delC(id) {
 /* ============================================================
    TOGGLE PAGO
 ============================================================ */
+// Al revertir un pago (REVERSO), usa la misma quincena (qKey) que tuvo el
+// PAGO original de ese índice, en vez de la quincena que esté seleccionada
+// en el desplegable en ese momento. Sin esto, revertir un pago antiguo desde
+// una vista distinta al Checklist podía registrar el reverso bajo la quincena
+// actual y hacer que el Checklist marcara como "no cobrado" una quincena
+// distinta que sí estaba pagada.
+function qKeyParaToggle(cid, qIdx, quedaPagado, qKeySeleccionado) {
+  if (quedaPagado) return qKeySeleccionado;
+  const orig = historial.find(h => h.clienteId === cid && h.qIndex === qIdx && h.accion === 'PAGO');
+  return orig ? orig.qKey : qKeySeleccionado;
+}
+
 async function togglePago(cid, qIdx) {
   const c = clientes.find(x=>x.id===cid); if(!c) return;
   const now = new Date();
-  const qKey = document.getElementById('qsel').value;
+  const qKeySel = document.getElementById('qsel').value;
   let pagos, pagadas, saldo, alerta;
 
   if (USE_FB) {
@@ -1221,7 +1165,7 @@ async function togglePago(cid, qIdx) {
       alerta = calcAlerta({...c, pagadas, saldo});
       const log = {
         id: 'h_' + Date.now(), clienteId: cid, nombre: c.nombre,
-        monto: c.pq, qIndex: qIdx, qKey,
+        monto: c.pq, qIndex: qIdx, qKey: qKeyParaToggle(cid, qIdx, pagos[qIdx], qKeySel),
         accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
         fecha: now.toLocaleDateString('es-MX'),
         hora: now.toLocaleTimeString('es-MX'),
@@ -1241,7 +1185,7 @@ async function togglePago(cid, qIdx) {
     alerta = calcAlerta({...c, pagadas, saldo});
     const log = {
       id: 'h_' + Date.now(), clienteId: cid, nombre: c.nombre,
-      monto: c.pq, qIndex: qIdx, qKey,
+      monto: c.pq, qIndex: qIdx, qKey: qKeyParaToggle(cid, qIdx, pagos[qIdx], qKeySel),
       accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
       fecha: now.toLocaleDateString('es-MX'),
       hora: now.toLocaleTimeString('es-MX'),
@@ -2304,22 +2248,6 @@ function init(){
     }
   },1600);
 }
-
-// Expose globals
-window.openNew=openNew; window.editC=editC; window.saveC=saveC;
-window.onProductoChange=onProductoChange;
-window.calcPQ=calcPQ; window.confirmDel=confirmDel;
-window.togglePago=togglePago; window.openEC=openEC; window.sendEC=sendEC;
-window.waCliente=waCliente; window.waAll=waAll;
-window.filterC=filterC; window.filterH=filterH;
-window.renderCL=renderCL; window.gv=gv; window.toggleSB=toggleSB;
-window.doExport=doExport; window.doExportXLSX=doExportXLSX; window.doExportJSON=doExportJSON; window.doImportJSON=doImportJSON;
-window.connectFirebase=connectFirebase; window.goLocal=goLocal;
-window.om=om; window.cm=cm;
-window.initPago=initPago; window.undoLastPago=undoLastPago;
-window.switchMorososTab=switchMorososTab; window.renderMorosos=renderMorosos;
-window.openReporte=openReporte; window.sendReporte=sendReporte;
-window.openReverso=openReverso; window.selReverso=selReverso; window.doReverso=doReverso;
 
 init();
 </script>
