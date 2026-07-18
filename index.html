@@ -891,14 +891,21 @@ function saveLocal() {
 /* ============================================================
    QUINCENA UTILS
 ============================================================ */
+// Cortes fijos de cobro: día 15 y día 30 de cada mes. Única excepción: en
+// febrero no existe el día 30, así que el segundo corte es el último día
+// real del mes (28 o 29). El día 31 (meses de 31 días) no es un corte propio:
+// sigue perteneciendo a la quincena que ya cerró el día 30.
+function segundoCorteDia(y, mo) {
+  return mo === 1 ? new Date(y, 2, 0).getDate() : 30;
+}
 function getQuincenas(n) {
   const qs = [];
   const now = new Date();
   let y = now.getFullYear(), mo = now.getMonth();
-  let d = now.getDate() <= 15 ? 15 : new Date(y, mo+1, 0).getDate();
+  let d = now.getDate() <= 15 ? 15 : segundoCorteDia(y, mo);
   for (let i = 0; i < n; i++) {
     qs.unshift({ label: fmtQ(y, mo, d), key: `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}` });
-    if (d === 15) { d = new Date(y, mo, 0).getDate(); mo--; if (mo<0){mo=11;y--;} }
+    if (d === 15) { mo--; if (mo<0){mo=11;y--;} d = segundoCorteDia(y, mo); }
     else d = 15;
   }
   return qs;
@@ -909,8 +916,25 @@ function fmtQ(y, m, d) {
 }
 function curQKey() {
   const n = new Date(), y = n.getFullYear(), mo = n.getMonth();
-  const d = n.getDate()<=15?15:new Date(y,mo+1,0).getDate();
+  const d = n.getDate()<=15 ? 15 : segundoCorteDia(y, mo);
   return `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+// Compara dos "qKey" (identificadores de quincena) tratando como iguales una
+// llave vieja del formato "último día del mes" (ej. 2026-07-31, generada
+// antes de fijar el corte en el día 30) con la nueva llave "2026-07-30" de la
+// misma quincena — así los pagos ya guardados en meses de 31 días se siguen
+// reconociendo sin tener que reescribir el historial guardado.
+function normalizarQKey(key) {
+  if (!key) return key;
+  const partes = key.split('-');
+  if (partes.length !== 3) return key;
+  const y = Number(partes[0]), m = Number(partes[1]), d = Number(partes[2]);
+  if (!y || !m || !d || d === 15) return key;
+  const seg = segundoCorteDia(y, m - 1);
+  return `${y}-${String(m).padStart(2,'0')}-${String(seg).padStart(2,'0')}`;
+}
+function mismaQuincena(a, b) {
+  return normalizarQKey(a) === normalizarQKey(b);
 }
 
 /* ============================================================
@@ -918,23 +942,19 @@ function curQKey() {
 ============================================================ */
 function nextQBoundary(d) {
   return d.getDate() === 15
-    ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
+    ? new Date(d.getFullYear(), d.getMonth(), segundoCorteDia(d.getFullYear(), d.getMonth()))
     : new Date(d.getFullYear(), d.getMonth() + 1, 15);
 }
-// Primer vencimiento de un préstamo quincenal: por defecto es el cierre de la
-// MISMA quincena en que inicia (15 o fin de mes), sin gracia extra de por medio.
-// Excepción: si ese cierre cae a menos de 5 días del inicio (p.ej. alguien que
-// empieza el día 30, con cierre al 31), se recorre al corte siguiente — así
-// nadie queda "atrasado" casi al día siguiente de recibir el préstamo.
-const DIAS_GRACIA_MINIMOS = 5;
+// Primer vencimiento de un préstamo quincenal: el corte 15/30 inmediato
+// SIGUIENTE a la fecha de inicio (si el cliente pide el día 15, su primer
+// pago es el día 30 del mismo mes; si pide el día 30, su primer pago es el
+// 15 del mes siguiente — sin gracia extra de por medio).
 function primerVencimiento(start) {
-  let d = new Date(start);
-  d.getDate() < 15
-    ? d.setDate(15)
-    : (d = new Date(d.getFullYear(), d.getMonth() + 1, 0));
-  const diasHastaCierre = Math.round((d - start) / 86400000);
-  if (diasHastaCierre < DIAS_GRACIA_MINIMOS) d = nextQBoundary(d);
-  return d;
+  const y = start.getFullYear(), mo = start.getMonth(), dia = start.getDate();
+  if (dia < 15) return new Date(y, mo, 15);
+  const seg = segundoCorteDia(y, mo);
+  if (dia < seg) return new Date(y, mo, seg);
+  return new Date(y, mo + 1, 15);
 }
 function qsElapsed(inicio, producto = 'quincenal_fijo') {
   if (!inicio) return 0;
@@ -1542,7 +1562,7 @@ function renderDash() {
   const qCobro = activos.reduce((a,c)=>a+c.pq,0);
   const qKey = curQKey();
   const cobrado = Math.max(0, historial
-    .filter(h=>h.qKey===qKey)
+    .filter(h=>mismaQuincena(h.qKey, qKey))
     .reduce((a,h)=>h.accion==='PAGO' ? a+(h.monto||0) : h.accion==='REVERSO' ? a-(h.monto||0) : a, 0));
 
   set('s-total', clientes.length);
@@ -1581,7 +1601,7 @@ function renderDash() {
 
   // Mini chart
   const qs = getQuincenas(6);
-  const vals = qs.map(q => Math.max(0, historial.filter(h=>h.qKey===q.key).reduce((a,h)=>h.accion==='PAGO' ? a+(h.monto||0) : h.accion==='REVERSO' ? a-(h.monto||0) : a, 0)));
+  const vals = qs.map(q => Math.max(0, historial.filter(h=>mismaQuincena(h.qKey, q.key)).reduce((a,h)=>h.accion==='PAGO' ? a+(h.monto||0) : h.accion==='REVERSO' ? a-(h.monto||0) : a, 0)));
   const mx = Math.max(...vals, 1);
   document.getElementById('d-chart').innerHTML = qs.map((q,i)=>`
     <div class="bc">
@@ -1726,7 +1746,7 @@ function renderCL() {
     // El checklist está organizado por quincena — el préstamo a 30 días no
     // pertenece a ninguna en particular, se cobra desde Acreditados/Morosos
     .filter(c => (c.saldo > 0 || c.pagadas < c.nq) && (c.producto||'quincenal_fijo') !== 'unico_30d')
-    .map(c => ({...c, _isPaid: (() => { const h = historial.find(e => e.clienteId===c.id && e.qKey===qKey); return h?.accion === 'PAGO'; })() }))
+    .map(c => ({...c, _isPaid: (() => { const h = historial.find(e => e.clienteId===c.id && mismaQuincena(e.qKey, qKey)); return h?.accion === 'PAGO'; })() }))
     .sort((a, b) => {
       if (a._isPaid === b._isPaid) return 0;
       return a._isPaid ? 1 : -1; // pagados van al final
