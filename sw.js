@@ -1,8 +1,8 @@
-const CACHE = 'hdcredit-v2';
+const CACHE = 'hdcredit-v3';
 const SHELL = [
-  '/HDcredit1.2/manifest.json',
-  '/HDcredit1.2/icon-192.png',
-  '/HDcredit1.2/icon-512.png'
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 // Instalar — solo cachea assets estáticos (íconos, manifest), NO el HTML
