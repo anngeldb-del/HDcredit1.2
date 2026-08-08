@@ -2272,6 +2272,23 @@ function initQSel(){
 }
 
 /* ============================================================
+   FIREBASE CONFIG POR DEFECTO (incrustada)
+   Se usa si el navegador no tiene nada guardado en localStorage
+   (limpieza de datos, actualización de Windows/Android, dispositivo
+   nuevo, etc.). Evita depender solo de localStorage, que el sistema
+   operativo o el navegador pueden borrar sin avisar.
+============================================================ */
+const DEFAULT_FB_CONFIG = {
+  apiKey: "AIzaSyA6IW4VCq1j05gHZRQ7l2LGwgsDDwC_JAY",
+  authDomain: "hdcredit12-2c6ba.firebaseapp.com",
+  projectId: "hdcredit12-2c6ba",
+  storageBucket: "hdcredit12-2c6ba.firebasestorage.app",
+  messagingSenderId: "842352004463",
+  appId: "1:842352004463:web:96acdcef130db26e46ac9a",
+  measurementId: "G-1KBSKD2Q27"
+};
+
+/* ============================================================
    INIT
 ============================================================ */
 function init(){
@@ -2281,6 +2298,12 @@ function init(){
   initQSel();
   renderTF();
 
+  // Pide almacenamiento persistente para reducir el riesgo de que el
+  // navegador borre localStorage bajo presión de espacio.
+  if(navigator.storage && navigator.storage.persist){
+    navigator.storage.persist().catch(()=>{});
+  }
+
   const saved=localStorage.getItem('hd_fb');
 
   // Hide loader after 1.6s then check config
@@ -2289,7 +2312,11 @@ function init(){
     setTimeout(()=>document.getElementById('loader').style.display='none',450);
 
     if(!saved){
-      document.getElementById('fb-cfg').style.display='flex';
+      // No hay nada guardado en este dispositivo: usa la config
+      // incrustada por defecto en vez de pedirle al usuario que la
+      // pegue a mano cada vez.
+      localStorage.setItem('hd_fb', JSON.stringify(DEFAULT_FB_CONFIG));
+      loadFirebaseSDK(DEFAULT_FB_CONFIG);
       return;
     }
     if(saved==='local'){
@@ -2300,7 +2327,7 @@ function init(){
       const cfg=JSON.parse(saved);
       loadFirebaseSDK(cfg);
     }catch(e){
-      loadLocal();
+      loadFirebaseSDK(DEFAULT_FB_CONFIG);
     }
   },1600);
 }
