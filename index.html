@@ -825,7 +825,11 @@ function startFBSync() {
     setSyncLbl('error');
     if (Date.now() - _errToastAt > 30000) { _errToastAt = Date.now(); toast('Error de sincronización: ' + err.message, 'err'); }
   });
-  _unsubHistorial = HIST().orderBy('ts', 'desc').limit(500).onSnapshot(snap => {
+  // Sin límite: un límite fijo (antes 500) hacía que los pagos más antiguos
+  // desaparecieran de Historial, Reportes y los respaldos aunque siguieran
+  // guardados en Firestore — con el volumen de este negocio, traer la
+  // colección completa es barato y evita perder visibilidad de datos reales
+  _unsubHistorial = HIST().orderBy('ts', 'desc').onSnapshot(snap => {
     historial = snap.docs.map(d => ({id: d.id, ...d.data()}));
     localStorage.setItem('hd_h', JSON.stringify(historial));
     renderH();
