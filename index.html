@@ -474,6 +474,9 @@ tbody tr:last-child td{border-bottom:none}
       <div class="ts"><table><thead><tr>
         <th>Acreditado</th><th>Monto</th><th>Quincena</th><th>Fecha</th><th>Hora</th><th>Tipo</th>
       </tr></thead><tbody id="tb-h"></tbody></table></div>
+      <div id="h-mas" style="padding:14px 18px;text-align:center;border-top:1px solid var(--border);display:none">
+        <button class="btn btn-s btn-sm" id="h-mas-btn" onclick="cargarMasHistorial()"><i class="fas fa-history"></i> Cargar historial anterior</button>
+      </div>
     </div>
   </div>
 </div>
@@ -691,6 +694,14 @@ let clientes = [], historial = [];
 let _pendingPago = {}, _pendingOrigHtml = {}, _lastPago = null, _undoing = false;
 let _unsubClientes = null, _unsubHistorial = null;
 
+/* Paginación de historial: por defecto solo se sincroniza en vivo lo
+   reciente (suficiente para checklist/reportes/dashboard) — esto reduce
+   drásticamente las lecturas de Firestore en cada apertura de la app.
+   El resto queda disponible bajo demanda con "Cargar más historial". */
+const HIST_DIAS_RECIENTES = 200; // cubre de sobra los 12 quincenas del selector (~180 días)
+let _histReciente = [], _histAntiguo = [];
+let _histCursor = null, _histPaginando = false, _histHayMas = true, _histCargando = false;
+
 /* ============================================================
    FIREBASE (lazy load)
 ============================================================ */
@@ -806,6 +817,8 @@ function startFBSync() {
   // Cancelar listeners anteriores para evitar duplicados si se reconecta
   if (_unsubClientes) { _unsubClientes(); _unsubClientes = null; }
   if (_unsubHistorial) { _unsubHistorial(); _unsubHistorial = null; }
+  // Reiniciar paginación de historial (sesión/reconexión nueva)
+  _histAntiguo = []; _histCursor = null; _histPaginando = false; _histHayMas = true;
   let _errToastAt = 0;
   _unsubClientes = CLI().orderBy('createdAt').onSnapshot({includeMetadataChanges: true}, snap => {
     // Se confía siempre en el snapshot (incluye listas vacías reales, p.ej.
@@ -825,13 +838,17 @@ function startFBSync() {
     setSyncLbl('error');
     if (Date.now() - _errToastAt > 30000) { _errToastAt = Date.now(); toast('Error de sincronización: ' + err.message, 'err'); }
   });
-  // Sin límite: un límite fijo (antes 500) hacía que los pagos más antiguos
-  // desaparecieran de Historial, Reportes y los respaldos aunque siguieran
-  // guardados en Firestore — con el volumen de este negocio, traer la
-  // colección completa es barato y evita perder visibilidad de datos reales
-  _unsubHistorial = HIST().orderBy('ts', 'desc').onSnapshot(snap => {
-    historial = snap.docs.map(d => ({id: d.id, ...d.data()}));
-    localStorage.setItem('hd_h', JSON.stringify(historial));
+  // En vivo solo se sincroniza lo reciente (ventana de tiempo, no un conteo
+  // fijo de documentos) — cubre checklist, dashboard y reportes sin traer
+  // cada vez el historial completo. Lo más viejo se carga bajo demanda con
+  // cargarMasHistorial() (botón "Cargar más" en la vista Historial) o al
+  // generar un respaldo/exportación completa (ver obtenerHistorialCompleto).
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - HIST_DIAS_RECIENTES);
+  _unsubHistorial = HIST().where('ts', '>=', cutoff.toISOString()).orderBy('ts', 'desc').onSnapshot(snap => {
+    _histReciente = snap.docs.map(d => ({id: d.id, ...d.data()}));
+    // No pisar el cursor de paginación una vez que el usuario ya pidió más
+    if (!_histPaginando) _histCursor = snap.docs.length ? snap.docs[snap.docs.length - 1] : null;
+    mergeHistorial();
     renderH();
     renderCL();
     renderDash();
@@ -847,6 +864,56 @@ function goLocal() {
   loadLocal();
 }
 
+/* ============================================================
+   PAGINACIÓN DE HISTORIAL
+============================================================ */
+function mergeHistorial() {
+  historial = _histReciente.concat(_histAntiguo);
+  localStorage.setItem('hd_h', JSON.stringify(historial));
+}
+
+// Trae la siguiente página de historial viejo (fuera de la ventana en vivo).
+// Se llama al tocar "Cargar más" en la vista Historial.
+async function cargarMasHistorial() {
+  if (!USE_FB || !_histCursor || _histCargando || !_histHayMas) return;
+  _histCargando = true;
+  renderH();
+  try {
+    const snap = await HIST().orderBy('ts', 'desc').startAfter(_histCursor).limit(200).get();
+    if (snap.empty) {
+      _histHayMas = false;
+    } else {
+      _histAntiguo = _histAntiguo.concat(snap.docs.map(d => ({id: d.id, ...d.data()})));
+      _histCursor = snap.docs[snap.docs.length - 1];
+      _histPaginando = true;
+      if (snap.docs.length < 200) _histHayMas = false;
+      mergeHistorial();
+    }
+  } catch(e) {
+    toast('No se pudo cargar más historial: ' + e.message, 'err');
+  }
+  _histCargando = false;
+  renderH();
+}
+
+// Trae TODO el historial en Firestore (paginado internamente), sin depender
+// de lo que ya esté sincronizado en vivo. Se usa solo para que los respaldos
+// (JSON/Excel) sean completos aunque la vista en pantalla muestre menos.
+async function obtenerHistorialCompleto() {
+  if (!USE_FB) return historial;
+  const out = [];
+  let cursor = null;
+  while (true) {
+    let q = HIST().orderBy('ts', 'desc').limit(500);
+    if (cursor) q = q.startAfter(cursor);
+    const snap = await q.get();
+    if (snap.empty) break;
+    out.push(...snap.docs.map(d => ({id: d.id, ...d.data()})));
+    cursor = snap.docs[snap.docs.length - 1];
+    if (snap.docs.length < 500) break;
+  }
+  return out;
+}
 
 /* ============================================================
    LOCAL STORAGE
@@ -1829,6 +1896,7 @@ function renderCL() {
    RENDER HISTORIAL
 ============================================================ */
 function renderH(list) {
+  const filtrando = !!list;
   const data = (list||historial).slice(0,300);
   const tb = document.getElementById('tb-h');
   tb.innerHTML = data.length ? data.map(h=>`<tr>
@@ -1840,6 +1908,21 @@ function renderH(list) {
     <td><span class="badge ${h.accion==='PAGO'?'bg':'by'}">${esc(h.accion||'—')}</span></td>
   </tr>`).join('')
     : '<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--muted)">Sin registros</td></tr>';
+
+  // Botón "Cargar historial anterior": solo aplica a la lista completa (sin
+  // filtro de búsqueda) y mientras haya páginas viejas fuera de la ventana
+  // en vivo por traer desde Firestore
+  const wrap = document.getElementById('h-mas');
+  if (wrap) {
+    wrap.style.display = (!filtrando && USE_FB && _histHayMas) ? '' : 'none';
+    const btn = document.getElementById('h-mas-btn');
+    if (btn) {
+      btn.disabled = _histCargando;
+      btn.innerHTML = _histCargando
+        ? '<i class="fas fa-spinner fa-spin"></i> Cargando…'
+        : '<i class="fas fa-history"></i> Cargar historial anterior';
+    }
+  }
 }
 
 let _filterHTimer;
@@ -1926,8 +2009,18 @@ function doExportXLSX() {
   }
 }
 
-function _generateXLSX() {
+async function _generateXLSX() {
   if (!clientes.length) { toast('No hay datos para exportar', 'err'); return; }
+
+  // La vista solo mantiene sincronizado el historial reciente (ver
+  // HIST_DIAS_RECIENTES) — para que el Excel exportado sea un respaldo
+  // completo, se trae todo el historial de Firestore en este momento
+  let historialCompleto = historial;
+  if (USE_FB && _histHayMas) {
+    toast('Preparando historial completo…', 'wa');
+    try { historialCompleto = await obtenerHistorialCompleto(); }
+    catch(e) { toast('No se pudo traer el historial completo, se exporta lo disponible: ' + e.message, 'wrn'); }
+  }
 
   const wb = XLSX.utils.book_new();
 
@@ -1948,10 +2041,10 @@ function _generateXLSX() {
   XLSX.utils.book_append_sheet(wb, ws1, 'Acreditados');
 
   // Hoja 2: Historial
-  if (historial.length) {
+  if (historialCompleto.length) {
     const ws2 = XLSX.utils.aoa_to_sheet([
       ['Acreditado','Monto','Quincena','Fecha','Hora','Tipo'],
-      ...historial.slice(0, 1000).map(h => [
+      ...historialCompleto.map(h => [
         h.nombre || '', h.monto || 0, h.qKey || '',
         h.fecha || '', h.hora || '', h.accion || ''
       ])
@@ -1965,9 +2058,17 @@ function _generateXLSX() {
   toast('Excel descargado ✅', 'ok');
 }
 
-function doExportJSON() {
+async function doExportJSON() {
   if (!clientes.length) { toast('No hay datos para exportar', 'err'); return; }
-  const payload = { clientes, historial, ts: new Date().toISOString(), v: '2.1' };
+  // Igual que en el Excel: el respaldo debe incluir TODO el historial, no
+  // solo la ventana reciente que se mantiene sincronizada en vivo
+  let historialCompleto = historial;
+  if (USE_FB && _histHayMas) {
+    toast('Preparando respaldo completo…', 'wa');
+    try { historialCompleto = await obtenerHistorialCompleto(); }
+    catch(e) { toast('No se pudo traer el historial completo, se respalda lo disponible: ' + e.message, 'wrn'); }
+  }
+  const payload = { clientes, historial: historialCompleto, ts: new Date().toISOString(), v: '2.1' };
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'}));
   a.download = 'HDCredit_respaldo_' + new Date().toISOString().split('T')[0] + '.json';
@@ -2351,6 +2452,7 @@ window.initPago=initPago; window.undoLastPago=undoLastPago;
 window.switchMorososTab=switchMorososTab; window.renderMorosos=renderMorosos;
 window.openReporte=openReporte; window.sendReporte=sendReporte;
 window.openReverso=openReverso; window.selReverso=selReverso; window.doReverso=doReverso;
+window.cargarMasHistorial=cargarMasHistorial;
 
 init();
 </script>
