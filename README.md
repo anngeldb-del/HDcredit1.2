@@ -37,3 +37,17 @@ La app funciona normalmente sin internet: lee la última copia conocida de los d
 - Corregido: los cobros y guardados que fallan en la nube ahora muestran un error real, en vez de un mensaje de éxito optimista.
 - Corregido: reconectar Firebase ya no duplica la carga del SDK.
 - Corregido: el Historial (y los reportes, respaldo JSON y Excel que dependen de él) ya no perdía de vista los pagos más antiguos al superar los 500 registros — se quitó el límite fijo de la consulta a Firestore, así que ahora se sincroniza el historial completo.
+- El historial en vivo ahora se limita a los últimos ~200 días (en vez de traer todo desde siempre en cada apertura), para gastar muchas menos lecturas de Firestore a medida que pasan los años. Lo más viejo sigue disponible con el botón "Cargar historial anterior" o al generar un respaldo/exportación completa.
+- El código de `index.html` (antes un solo bloque de ~1800 líneas) se dividió en módulos (`js/datos.js`, `sync.js`, `negocio.js`, `ui.js`, `export.js`, `app.js`) para que sea más fácil de mantener, sin cambiar ningún comportamiento.
+- Se agregó una suite de smoke tests (Playwright, en `tests/`) que cubre crear/cobrar/revertir/eliminar un acreditado y exportar el respaldo — ver instrucciones de instalación más abajo.
+- `togglePago()` ahora usa una transacción real de Firestore (`runTransaction`) cuando hay conexión, en vez de "leer y luego escribir por separado" — elimina el riesgo de que dos dispositivos cobrando el mismo acreditado casi al mismo tiempo se pisen entre sí. Sin conexión sigue funcionando igual que antes (cola offline).
+
+## Pruebas automatizadas
+
+```
+npm install
+npx playwright install chromium   # solo la primera vez
+npm test
+```
+
+Corren contra un servidor estático local, en modo "solo local" (sin depender de un Firebase real). No afectan el despliegue — la app sigue siendo los mismos archivos estáticos de siempre.
