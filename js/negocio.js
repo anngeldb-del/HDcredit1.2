@@ -242,56 +242,74 @@ async function delC(id) {
 /* ============================================================
    TOGGLE PAGO
 ============================================================ */
+// Calcula el nuevo estado de un cobro/reverso a partir del arreglo de pagos
+// más reciente conocido. Se usa tanto dentro de la transacción de Firestore
+// como en modo local, para no duplicar la lógica de negocio dos veces.
+function calcularCobro(c, pagosBase, qIdx, qKey) {
+  const pagos = [...(pagosBase || Array(c.nq||12).fill(false))];
+  pagos[qIdx] = !pagos[qIdx];
+  const pagadas = pagos.filter(Boolean).length;
+  const saldo = Math.max(0, (c.nq - pagadas) * c.pq);
+  const alerta = calcAlerta({...c, pagadas, saldo});
+  const now = new Date();
+  const log = {
+    id: 'h_' + Date.now(), clienteId: c.id, nombre: c.nombre,
+    monto: c.pq, qIndex: qIdx, qKey,
+    accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
+    fecha: now.toLocaleDateString('es-MX'),
+    hora: now.toLocaleTimeString('es-MX'),
+    ts: now.toISOString()
+  };
+  return { pagos, pagadas, saldo, alerta, log, now };
+}
+
 async function togglePago(cid, qIdx) {
   const c = clientes.find(x=>x.id===cid); if(!c) return;
-  const now = new Date();
   const qKey = document.getElementById('qsel').value;
   let pagos, pagadas, saldo, alerta;
 
   if (USE_FB) {
-    try {
-      // Trae la versión más reciente conocida del acreditado (server si hay
-      // red, cache local si no) antes de calcular el nuevo estado — reduce el
-      // riesgo de que dos dispositivos cobrando casi al mismo tiempo se pisen
-      // el arreglo de pagos entre sí
-      const freshSnap = await CLI().doc(cid).get();
-      const freshData = freshSnap.exists ? freshSnap.data() : c;
-      pagos = [...(freshData.pagos||Array(c.nq||12).fill(false))];
-      pagos[qIdx] = !pagos[qIdx];
-      pagadas = pagos.filter(Boolean).length;
-      saldo = Math.max(0, (c.nq - pagadas) * c.pq);
-      alerta = calcAlerta({...c, pagadas, saldo});
-      const log = {
-        id: 'h_' + Date.now(), clienteId: cid, nombre: c.nombre,
-        monto: c.pq, qIndex: qIdx, qKey,
-        accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
-        fecha: now.toLocaleDateString('es-MX'),
-        hora: now.toLocaleTimeString('es-MX'),
-        ts: now.toISOString()
-      };
-      await CLI().doc(cid).set({pagos, pagadas, saldo, alerta, updatedAt: now.toISOString()}, {merge:true});
-      await HIST().doc(log.id).set(log);
-    } catch(e) {
-      toast('❌ No se pudo registrar el cobro en la nube: ' + e.message, 'err');
-      return;
+    let resultado;
+    // Transacción real solo si hay red: una transacción de Firestore necesita
+    // ida y vuelta al servidor, no funciona con la cola offline. Si el
+    // dispositivo está sin conexión, se salta directo al modo de respaldo de
+    // abajo (leer+escribir), que sí encola el cobro y lo sube al volver la señal.
+    if (navigator.onLine) {
+      try {
+        // Firestore relee el documento del acreditado DENTRO de la misma
+        // transacción y reintenta solo si otro dispositivo lo cambió al mismo
+        // tiempo — así dos cobros casi simultáneos ya no se pueden pisar entre sí.
+        resultado = await DB.runTransaction(async (tx) => {
+          const freshSnap = await tx.get(CLI().doc(cid));
+          const freshData = freshSnap.exists ? freshSnap.data() : c;
+          const r = calcularCobro(c, freshData.pagos, qIdx, qKey);
+          tx.set(CLI().doc(cid), {pagos: r.pagos, pagadas: r.pagadas, saldo: r.saldo, alerta: r.alerta, updatedAt: r.now.toISOString()}, {merge:true});
+          tx.set(HIST().doc(r.log.id), r.log);
+          return r;
+        });
+      } catch(e) {
+        console.warn('HD Crédit — transacción de cobro falló, se intenta modo respaldo:', e.code || e.message);
+      }
     }
+    if (!resultado) {
+      try {
+        const freshSnap = await CLI().doc(cid).get();
+        const freshData = freshSnap.exists ? freshSnap.data() : c;
+        resultado = calcularCobro(c, freshData.pagos, qIdx, qKey);
+        await CLI().doc(cid).set({pagos: resultado.pagos, pagadas: resultado.pagadas, saldo: resultado.saldo, alerta: resultado.alerta, updatedAt: resultado.now.toISOString()}, {merge:true});
+        await HIST().doc(resultado.log.id).set(resultado.log);
+      } catch(e2) {
+        toast('❌ No se pudo registrar el cobro en la nube: ' + e2.message, 'err');
+        return;
+      }
+    }
+    ({ pagos, pagadas, saldo, alerta } = resultado);
   } else {
-    pagos = [...(c.pagos||Array(c.nq||12).fill(false))];
-    pagos[qIdx] = !pagos[qIdx];
-    pagadas = pagos.filter(Boolean).length;
-    saldo = Math.max(0, (c.nq - pagadas) * c.pq);
-    alerta = calcAlerta({...c, pagadas, saldo});
-    const log = {
-      id: 'h_' + Date.now(), clienteId: cid, nombre: c.nombre,
-      monto: c.pq, qIndex: qIdx, qKey,
-      accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
-      fecha: now.toLocaleDateString('es-MX'),
-      hora: now.toLocaleTimeString('es-MX'),
-      ts: now.toISOString()
-    };
+    const r = calcularCobro(c, c.pagos, qIdx, qKey);
+    ({ pagos, pagadas, saldo, alerta } = r);
     const i = clientes.findIndex(x=>x.id===cid);
     clientes[i] = {...clientes[i], pagos, pagadas, saldo, alerta};
-    historial.unshift(log);
+    historial.unshift(r.log);
     saveLocal();
   }
   toast(pagos[qIdx] ? `✅ Pago — ${c.nombre} $${c.pq.toLocaleString('es-MX')}` : `↩️ Revertido — ${c.nombre}`, pagos[qIdx]?'ok':'wrn');
