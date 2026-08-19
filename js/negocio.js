@@ -1,0 +1,355 @@
+/* ============================================================
+   QUINCENA UTILS
+============================================================ */
+function getQuincenas(n) {
+  const qs = [];
+  const now = new Date();
+  let y = now.getFullYear(), mo = now.getMonth();
+  let d = now.getDate() <= 15 ? 15 : new Date(y, mo+1, 0).getDate();
+  for (let i = 0; i < n; i++) {
+    qs.unshift({ label: fmtQ(y, mo, d), key: `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}` });
+    if (d === 15) { d = new Date(y, mo, 0).getDate(); mo--; if (mo<0){mo=11;y--;} }
+    else d = 15;
+  }
+  return qs;
+}
+function fmtQ(y, m, d) {
+  const M = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return `${d===15?'1ª':'2ª'} Q · ${M[m]} ${y}`;
+}
+function curQKey() {
+  const n = new Date(), y = n.getFullYear(), mo = n.getMonth();
+  const d = n.getDate()<=15?15:new Date(y,mo+1,0).getDate();
+  return `${y}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+/* ============================================================
+   ATRASADO — cálculo real por fechas
+============================================================ */
+function nextQBoundary(d) {
+  return d.getDate() === 15
+    ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
+    : new Date(d.getFullYear(), d.getMonth() + 1, 15);
+}
+function qsElapsed(inicio, producto = 'quincenal_fijo') {
+  if (!inicio) return 0;
+  const start = new Date(inicio + 'T12:00:00');
+  const now   = new Date();
+  if (start >= now) return 0;
+  if (producto === 'unico_30d') {
+    // Pago único: vence a los 30 días naturales del inicio, sin alinearse a quincenas
+    const due = new Date(start);
+    due.setDate(due.getDate() + 30);
+    return now >= due ? 1 : 0;
+  }
+  let d = new Date(start);
+  // Avanzar al cierre de la quincena de inicio
+  d.getDate() < 15
+    ? d.setDate(15)
+    : (d = new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  // El primer pago vence en la quincena SIGUIENTE a la del inicio
+  // (el cliente tiene una quincena completa de gracia antes del primer cobro)
+  d = nextQBoundary(d);
+  let count = 0;
+  while (d < now && count < 36) {
+    count++;
+    d = nextQBoundary(d);
+  }
+  return count;
+}
+
+function calcAlerta(c) {
+  if (!c || !c.nq || c.saldo === 0 || (c.pagadas||0) >= c.nq) return '';
+  if (!c.inicio) return '';
+  const expected = Math.min(qsElapsed(c.inicio, c.producto), c.nq);
+  return (c.pagadas||0) < expected ? 'ATRASADO' : '';
+}
+
+/* ============================================================
+   RESPALDO AUTOMÁTICO (últimas 2 sesiones)
+============================================================ */
+function autoBackup() {
+  if (!clientes.length) return;
+  try {
+    localStorage.setItem('hd_bk_1', localStorage.getItem('hd_bk_0') || '');
+    localStorage.setItem('hd_bk_0', JSON.stringify({ clientes, historial, ts: new Date().toISOString() }));
+  } catch(e) { /* cuota llena — ignorar */ }
+}
+
+/* ============================================================
+   CRUD
+============================================================ */
+function onProductoChange() {
+  const producto = document.getElementById('f-producto').value;
+  const montoSel = document.getElementById('f-monto');
+  const montoActual = montoSel.value;
+  const montos = producto === 'unico_30d'
+    ? [1000,2000,3000,4000,5000,6000,7000,8000,9000,10000]
+    : [1000,2000,3000,4000,5000,6000,7000,8000,9000,10000,11000,12000,13000,14000,15000];
+  montoSel.innerHTML = '<option value="">Seleccionar...</option>'
+    + montos.map(m => `<option>${m}</option>`).join('');
+  if (montos.includes(parseInt(montoActual))) montoSel.value = montoActual;
+
+  document.getElementById('fg-plazo').style.display = producto === 'unico_30d' ? 'none' : '';
+  document.getElementById('lbl-pq').textContent = producto === 'unico_30d' ? 'Total a Pagar (30 días)' : 'Pago Quincenal';
+  document.getElementById('lbl-pag').textContent = producto === 'unico_30d' ? '¿Ya pagado? (0 o 1)' : 'Q ya Pagadas';
+  calcPQ();
+}
+
+function openNew() {
+  document.getElementById('eid').value = '';
+  document.getElementById('m-title').textContent = 'Nuevo Acreditado';
+  ['f-nom','f-tel','f-notas'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-producto').value = 'quincenal_fijo';
+  document.getElementById('f-monto').value = '';
+  document.getElementById('f-plazo').value = '';
+  document.getElementById('f-pq').value = '';
+  document.getElementById('f-ini').value = new Date().toISOString().split('T')[0];
+  document.getElementById('f-pag').value = '0';
+  onProductoChange();
+  om('m-cliente');
+}
+
+function editC(id) {
+  const c = clientes.find(x=>x.id===id); if(!c) return;
+  document.getElementById('eid').value = id;
+  document.getElementById('m-title').textContent = 'Editar Acreditado';
+  document.getElementById('f-nom').value = c.nombre;
+  document.getElementById('f-producto').value = c.producto || 'quincenal_fijo';
+  onProductoChange();
+  document.getElementById('f-monto').value = c.monto;
+  document.getElementById('f-plazo').value = c.nq;
+  document.getElementById('f-pq').value = '$' + (c.pq||0).toLocaleString('es-MX');
+  document.getElementById('f-ini').value = c.inicio||'';
+  document.getElementById('f-pag').value = c.pagadas||0;
+  document.getElementById('f-tel').value = c.telefono||'';
+  document.getElementById('f-notas').value = c.notas||'';
+  om('m-cliente');
+}
+
+function calcPQ() {
+  const producto = document.getElementById('f-producto').value;
+  const m = parseInt(document.getElementById('f-monto').value)||0;
+  const pq = document.getElementById('f-pq');
+  if (producto === 'unico_30d') {
+    if (!m) { pq.value = ''; return; }
+    if (!TF30[m]) { pq.value = 'Monto no válido'; return; }
+    pq.value = '$' + TF30[m].toLocaleString('es-MX');
+    return;
+  }
+  const p = parseInt(document.getElementById('f-plazo').value)||0;
+  if (m && p) {
+    if (!TF[m]) { pq.value = 'Monto no válido'; return; }
+    if (!TF[m][p]) { pq.value = 'No aplica'; return; }
+    pq.value = '$' + TF[m][p].toLocaleString('es-MX');
+  } else pq.value = '';
+}
+
+async function saveC() {
+  const nombre = document.getElementById('f-nom').value.trim();
+  const producto = document.getElementById('f-producto').value || 'quincenal_fijo';
+  const monto = parseInt(document.getElementById('f-monto').value)||0;
+  const nq = producto === 'unico_30d' ? 1 : (parseInt(document.getElementById('f-plazo').value)||0);
+  const inicio = document.getElementById('f-ini').value;
+  const pagadas = Math.min(parseInt(document.getElementById('f-pag').value)||0, nq);
+  const telefono = document.getElementById('f-tel').value.replace(/\D/g,'').slice(0,10);
+  const notas = document.getElementById('f-notas').value.trim();
+  const eid = document.getElementById('eid').value;
+
+  if (!nombre || !monto || !nq) { toast('Completa los campos requeridos', 'wrn'); return; }
+  let pq;
+  if (producto === 'unico_30d') {
+    if (!TF30[monto]) { toast('Monto no válido para Préstamo 30 Días', 'err'); return; }
+    pq = TF30[monto];
+  } else {
+    if (!TF[monto] || !TF[monto][nq]) { toast('Combinación monto/plazo no válida', 'err'); return; }
+    pq = TF[monto][nq];
+  }
+  if (!inicio && !eid) toast('⚠️ Sin fecha de inicio: no se podrán detectar atrasos automáticamente', 'wrn');
+
+  const saldo = Math.max(0, (nq - pagadas) * pq);
+  // Al editar: preservar el array pagos si el plazo y las quincenas pagadas no cambiaron
+  // (evita destruir el patrón de pagos individuales generado por reversiones)
+  let pagos;
+  if (eid) {
+    const existing = clientes.find(x=>x.id===eid);
+    if (existing && existing.nq === nq && existing.pagadas === pagadas && Array.isArray(existing.pagos)) {
+      pagos = existing.pagos.slice(0, nq);
+      while (pagos.length < nq) pagos.push(false);
+    } else {
+      pagos = Array(nq).fill(false).map((_,i) => i < pagadas);
+    }
+  } else {
+    pagos = Array(nq).fill(false).map((_,i) => i < pagadas);
+  }
+  const data = { nombre, producto, monto, pq, nq, inicio, pagadas, saldo, pagos, telefono, notas,
+    alerta: calcAlerta({saldo, pagadas, nq, inicio, producto}), updatedAt: new Date().toISOString() };
+
+  if (eid) {
+    if (USE_FB) {
+      try { await CLI().doc(eid).set(data, {merge:true}); }
+      catch(e) { toast('No se pudo guardar en la nube: ' + e.message, 'err'); return; }
+    } else { const i = clientes.findIndex(x=>x.id===eid); if(i>=0) clientes[i]={...clientes[i],...data}; saveLocal(); refresh(); }
+    toast(`${nombre} actualizado`, 'ok');
+  } else {
+    const id = 'c_' + Date.now();
+    data.id = id; data.createdAt = new Date().toISOString();
+    if (USE_FB) {
+      try { await CLI().doc(id).set(data); }
+      catch(e) { toast('No se pudo guardar en la nube: ' + e.message, 'err'); return; }
+    } else { clientes.push(data); saveLocal(); refresh(); }
+    toast(`${nombre} agregado ✅`, 'ok');
+  }
+  cm('m-cliente');
+}
+
+function confirmDel(id) {
+  const c = clientes.find(x=>x.id===id); if(!c) return;
+  document.getElementById('conf-msg').textContent = `¿Eliminar a ${c.nombre}? Esta acción no se puede deshacer.`;
+  document.getElementById('conf-ok').onclick = () => delC(id);
+  om('m-confirm');
+}
+
+async function delC(id) {
+  if (USE_FB) {
+    try {
+      await CLI().doc(id).delete();
+    } catch(e) {
+      toast('No se pudo eliminar en la nube: ' + e.message, 'err');
+      return;
+    }
+    // Limpiar historial huérfano en Firestore (best-effort: el cliente ya se eliminó)
+    try {
+      const snap = await HIST().where('clienteId', '==', id).get();
+      if (snap.docs.length) {
+        const batch = DB.batch();
+        snap.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+      }
+    } catch(e) {
+      console.error('HD Crédit — no se pudo limpiar historial huérfano:', e);
+      toast('⚠️ Cliente eliminado, pero no se pudo limpiar su historial — revisa Firestore', 'wrn');
+    }
+  } else {
+    clientes = clientes.filter(x=>x.id!==id);
+    historial = historial.filter(h=>h.clienteId!==id);
+    saveLocal(); refresh();
+  }
+  cm('m-confirm');
+  toast('Acreditado eliminado', 'wrn');
+}
+
+/* ============================================================
+   TOGGLE PAGO
+============================================================ */
+async function togglePago(cid, qIdx) {
+  const c = clientes.find(x=>x.id===cid); if(!c) return;
+  const now = new Date();
+  const qKey = document.getElementById('qsel').value;
+  let pagos, pagadas, saldo, alerta;
+
+  if (USE_FB) {
+    try {
+      // Trae la versión más reciente conocida del acreditado (server si hay
+      // red, cache local si no) antes de calcular el nuevo estado — reduce el
+      // riesgo de que dos dispositivos cobrando casi al mismo tiempo se pisen
+      // el arreglo de pagos entre sí
+      const freshSnap = await CLI().doc(cid).get();
+      const freshData = freshSnap.exists ? freshSnap.data() : c;
+      pagos = [...(freshData.pagos||Array(c.nq||12).fill(false))];
+      pagos[qIdx] = !pagos[qIdx];
+      pagadas = pagos.filter(Boolean).length;
+      saldo = Math.max(0, (c.nq - pagadas) * c.pq);
+      alerta = calcAlerta({...c, pagadas, saldo});
+      const log = {
+        id: 'h_' + Date.now(), clienteId: cid, nombre: c.nombre,
+        monto: c.pq, qIndex: qIdx, qKey,
+        accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
+        fecha: now.toLocaleDateString('es-MX'),
+        hora: now.toLocaleTimeString('es-MX'),
+        ts: now.toISOString()
+      };
+      await CLI().doc(cid).set({pagos, pagadas, saldo, alerta, updatedAt: now.toISOString()}, {merge:true});
+      await HIST().doc(log.id).set(log);
+    } catch(e) {
+      toast('❌ No se pudo registrar el cobro en la nube: ' + e.message, 'err');
+      return;
+    }
+  } else {
+    pagos = [...(c.pagos||Array(c.nq||12).fill(false))];
+    pagos[qIdx] = !pagos[qIdx];
+    pagadas = pagos.filter(Boolean).length;
+    saldo = Math.max(0, (c.nq - pagadas) * c.pq);
+    alerta = calcAlerta({...c, pagadas, saldo});
+    const log = {
+      id: 'h_' + Date.now(), clienteId: cid, nombre: c.nombre,
+      monto: c.pq, qIndex: qIdx, qKey,
+      accion: pagos[qIdx] ? 'PAGO' : 'REVERSO',
+      fecha: now.toLocaleDateString('es-MX'),
+      hora: now.toLocaleTimeString('es-MX'),
+      ts: now.toISOString()
+    };
+    const i = clientes.findIndex(x=>x.id===cid);
+    clientes[i] = {...clientes[i], pagos, pagadas, saldo, alerta};
+    historial.unshift(log);
+    saveLocal();
+  }
+  toast(pagos[qIdx] ? `✅ Pago — ${c.nombre} $${c.pq.toLocaleString('es-MX')}` : `↩️ Revertido — ${c.nombre}`, pagos[qIdx]?'ok':'wrn');
+  if (!_undoing) { _lastPago = {cid, qIdx}; showUndo(c.nombre, pagos[qIdx]); }
+  renderCL();
+  renderDash();
+}
+
+/* ============================================================
+   RETROCEDER PAGO
+============================================================ */
+function openReverso(id) {
+  const c = clientes.find(x => x.id === id); if (!c) return;
+  const pagos = c.pagos || Array(c.nq).fill(false);
+  const pagadas = pagos.map((p, i) => p ? i : -1).filter(i => i >= 0);
+  if (!pagadas.length) { toast('Este acreditado no tiene pagos registrados', 'wrn'); return; }
+
+  const revOk = document.getElementById('rev-ok');
+  revOk.style.opacity = '.45';
+  revOk.style.pointerEvents = 'none';
+
+  document.getElementById('rev-body').innerHTML = `
+    <p style="color:var(--muted);font-size:.84rem;margin-bottom:14px">
+      Selecciona la quincena a revertir de <strong>${esc(c.nombre)}</strong>:
+    </p>
+    ${pagadas.map(i => {
+      const dueDate = getQDueDate(c.inicio, i, c.producto);
+      const dueLbl = dueDate
+        ? dueDate.toLocaleDateString('es-MX', {day:'2-digit', month:'short', year:'2-digit'})
+        : '—';
+      return `<div class="rev-item" onclick="selReverso('${c.id}',${i},this)">
+        <div>
+          <div style="font-weight:700;font-size:.87rem">Quincena ${i + 1}</div>
+          <div style="font-size:.73rem;color:var(--muted);font-family:'DM Mono',monospace">Vto. ${dueLbl}</div>
+        </div>
+        <span style="font-family:'DM Mono',monospace;color:var(--accent)">$${c.pq.toLocaleString('es-MX')}</span>
+        <i class="fas fa-chevron-right" style="color:var(--muted);font-size:.8rem"></i>
+      </div>`;
+    }).join('')}`;
+
+  om('m-reverso');
+}
+
+function selReverso(cid, qIdx, el) {
+  document.querySelectorAll('#m-reverso .rev-item').forEach(x => x.classList.remove('rev-sel'));
+  el.classList.add('rev-sel');
+  const revOk = document.getElementById('rev-ok');
+  revOk.style.opacity = '1';
+  revOk.style.pointerEvents = 'auto';
+  revOk.onclick = () => doReverso(cid, qIdx);
+}
+
+async function doReverso(cid, qIdx) {
+  cm('m-reverso');
+  const c = clientes.find(x => x.id === cid); if (!c) return;
+  const pagos = c.pagos || Array(c.nq).fill(false);
+  if (!pagos[qIdx]) { toast('Esa quincena ya no está pagada', 'wrn'); return; }
+  _undoing = true;
+  try { await togglePago(cid, qIdx); } finally { _undoing = false; }
+}
+
