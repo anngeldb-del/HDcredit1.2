@@ -4,9 +4,20 @@ Sistema de control de pagos quincenal HD Crédit — PWA de archivo único (`ind
 
 ## Sincronización sin inicio de sesión
 
-Por decisión explícita del dueño de los datos, esta app **ya no pide iniciar sesión con Google**. Todos los dispositivos leen y escriben la misma ruta compartida en Firestore (`usuarios/compartido/...`), protegida únicamente por las reglas del proyecto — no hay control de acceso por cuenta.
+Por decisión explícita del dueño de los datos, esta app **no pide iniciar sesión con Google** ni muestra ninguna pantalla de login. Todos los dispositivos leen y escriben la misma ruta compartida en Firestore (`usuarios/compartido/...`). El código de Firebase Authentication con Google Sign-In (el que causaba pantallas congeladas por antivirus/popups bloqueados) sigue eliminado por completo.
 
-**Importante:** con esto, cualquier persona que conozca la configuración de Firebase de este proyecto puede leer y editar los datos. Se optó por esto deliberadamente para evitar los problemas de inicio de sesión (antivirus bloqueando el dominio de Firebase en PC, ventanas emergentes que no completaban el login en el celular). El código de Firebase Authentication (Google Sign-In) fue eliminado por completo del proyecto — no queda ningún rastro de esa integración.
+### Autenticación anónima silenciosa (nuevo)
+
+La app ahora inicia sesión anónima en Firebase (`signInAnonymously()`) en segundo plano, sin ninguna interacción del usuario — no hay ventana, ni botón, ni cuenta que crear. Esto permite exigir en las reglas de Firestore `allow read, write: if request.auth != null;` en vez de dejarlas completamente abiertas a cualquiera que conozca la configuración del proyecto.
+
+Si la autenticación anónima falla o tarda (por ejemplo, si el proveedor "Anónimo" no está habilitado en el proyecto), la app **sigue funcionando exactamente igual que antes** — no bloquea nada, solo deja de cumplir el requisito de las reglas nuevas hasta que se resuelva.
+
+**Para activar esta protección en un proyecto ya conectado (como el actual), hay que hacer dos pasos manuales en Firebase Console, en este orden:**
+1. **Authentication → Sign-in method → habilitar el proveedor "Anónimo".** Con este código ya desplegado, esto basta para que los dispositivos empiecen a autenticarse solos.
+2. **Confirmar que aparecen usuarios anónimos** en Authentication → Users (uno por dispositivo/navegador) antes de seguir.
+3. Recién entonces, **Firestore → Reglas** → cambiar `allow read, write: if true;` por `allow read, write: if request.auth != null;`. Hacerlo antes de confirmar el paso 2 dejaría la app sin poder sincronizar.
+
+Mientras no se den estos pasos en la consola, las reglas siguen abiertas (`if true`) y todo sigue funcionando como hasta ahora — el cambio de código por sí solo no rompe nada, pero tampoco protege nada hasta que se actualicen las reglas.
 
 ## Modo offline
 

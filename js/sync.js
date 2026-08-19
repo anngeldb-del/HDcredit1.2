@@ -41,17 +41,21 @@ function loadFirebaseSDK(cfg) {
 
   let settled = false;
   // Si la red va lenta o se traba, no dejar la app esperando indefinidamente:
-  // a los 10s se cae a modo local en vez de quedarse en blanco
+  // a los 12s se cae a modo local en vez de quedarse en blanco
   const timeoutId = setTimeout(() => {
     if (settled) return;
     settled = true;
     toast('Firebase tardó demasiado en responder. Usando modo local.', 'err');
     goLocal();
-  }, 10000);
+  }, 12000);
 
-  // Sin login: ya no se carga el SDK de Auth, solo app + firestore
+  // Se vuelve a cargar el SDK de Auth (además de app + firestore), pero SOLO
+  // para inicio de sesión anónimo y silencioso (sin ventana emergente, sin
+  // pantalla de Google) — ver authAnonimo() más abajo. No es el login
+  // interactivo que se quitó antes.
   loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js')
     .then(() => loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js'))
+    .then(() => loadScript('https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js'))
     .then(() => {
       if (settled) return;
       settled = true;
@@ -67,11 +71,35 @@ function loadFirebaseSDK(cfg) {
     });
 }
 
-// Sin login: todos los dispositivos comparten la misma ruta de datos
-// (usuarios/compartido/...), protegida solo por reglas de Firestore abiertas
+// Sin login interactivo: todos los dispositivos comparten la misma ruta de
+// datos (usuarios/compartido/...). Antes esto solo estaba protegido por
+// reglas de Firestore abiertas a cualquiera; ahora cada dispositivo se
+// autentica solo (ver authAnonimo), para poder exigir "if request.auth !=
+// null" en las reglas sin volver a pedirle nada al usuario.
 const UID_COMPARTIDO = 'compartido';
 
-function initFB(cfg) {
+// Inicia sesión anónima en segundo plano: identifica el dispositivo ante
+// Firestore SIN pedir nada al usuario (sin ventana, sin popup, sin Google).
+// Sirve para poder exigir "if request.auth != null" en las reglas de
+// Firestore en vez de dejarlas abiertas a cualquiera. Si falla o tarda, la
+// app sigue funcionando igual que hasta ahora (no bloquea nada) — solo
+// importa una vez que las reglas del proyecto se actualicen para exigirlo.
+function authAnonimo() {
+  return new Promise(resolve => {
+    let settled = false;
+    const t = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      console.warn('HD Crédit — auth anónima tardó demasiado, se continúa sin esperar más');
+      resolve(false);
+    }, 8000);
+    firebase.auth().signInAnonymously()
+      .then(() => { if (settled) return; settled = true; clearTimeout(t); resolve(true); })
+      .catch(e => { if (settled) return; settled = true; clearTimeout(t); console.warn('HD Crédit — auth anónima falló:', e.code || e.message); resolve(false); });
+  });
+}
+
+async function initFB(cfg) {
   try {
     if (!firebase.apps.length) firebase.initializeApp(cfg);
     DB = firebase.firestore();
@@ -88,6 +116,7 @@ function initFB(cfg) {
     // a partir de snap.metadata, que refleja la conexión real con Firestore
     // (más confiable que navigator.onLine, que solo mira la red del dispositivo)
     setSyncLbl(navigator.onLine ? 'ok' : 'local');
+    await authAnonimo();
     startFBSync();
   } catch(e) {
     console.error(e);

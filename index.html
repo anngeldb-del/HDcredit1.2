@@ -308,9 +308,10 @@ tbody tr:last-child td{border-bottom:none}
     <div class="cfg-steps">
       <div class="cstep"><div class="csn">1</div><div>Ve a <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a> y crea un proyecto (sin Google Analytics).</div></div>
       <div class="cstep"><div class="csn">2</div><div>En el proyecto → <strong>Firestore Database</strong> → Crear base de datos → Modo producción.</div></div>
-      <div class="cstep"><div class="csn">3</div><div>Firestore → pestaña <strong>Reglas</strong> → reemplaza todo con:<br><code style="color:var(--accent);font-size:.75rem">rules_version='2'; service cloud.firestore { match /databases/{database}/documents { match /usuarios/{document=**} { allow read, write: if true; } } }</code><br><span style="color:var(--muted);font-size:.73rem">Sin inicio de sesión: todos los dispositivos comparten la misma ruta de datos. Cualquiera con esta configuración puede leerlos y escribirlos.</span></div></div>
-      <div class="cstep"><div class="csn">4</div><div>Configuración del proyecto ⚙️ → <strong>Agregar app</strong> → Web (&lt;/&gt;) → copia el objeto <code style="color:var(--accent)">firebaseConfig</code>.</div></div>
-      <div class="cstep"><div class="csn">5</div><div>Pega el JSON abajo y toca <strong>Conectar Firebase</strong>.</div></div>
+      <div class="cstep"><div class="csn">3</div><div><strong>Authentication</strong> → pestaña <strong>Sign-in method</strong> → habilita el proveedor <strong>Anónimo</strong>.<br><span style="color:var(--muted);font-size:.73rem">No pide login al usuario — cada dispositivo se identifica solo, en silencio, sin ventana ni cuenta de Google.</span></div></div>
+      <div class="cstep"><div class="csn">4</div><div>Firestore → pestaña <strong>Reglas</strong> → reemplaza todo con:<br><code style="color:var(--accent);font-size:.75rem">rules_version='2'; service cloud.firestore { match /databases/{database}/documents { match /usuarios/{document=**} { allow read, write: if request.auth != null; } } }</code><br><span style="color:var(--muted);font-size:.73rem">Solo dispositivos con la app conectada (autenticados en silencio) pueden leer/escribir — ya no cualquiera que conozca la configuración.</span></div></div>
+      <div class="cstep"><div class="csn">5</div><div>Configuración del proyecto ⚙️ → <strong>Agregar app</strong> → Web (&lt;/&gt;) → copia el objeto <code style="color:var(--accent)">firebaseConfig</code>.</div></div>
+      <div class="cstep"><div class="csn">6</div><div>Pega el JSON abajo y toca <strong>Conectar Firebase</strong>.</div></div>
     </div>
     <div class="fg">
       <label>firebaseConfig JSON</label>
