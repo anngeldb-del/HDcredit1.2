@@ -11,12 +11,13 @@ function getQDueDate(inicio, periodIdx, producto = 'quincenal_fijo') {
     return due;
   }
   let d = new Date(start);
+  // Cierre de la quincena de inicio = vencimiento del primer pago.
+  // Sin quincena de gracia: los pagos siempre vencen los días 15 y 30/31.
   if (d.getDate() < 15) {
     d.setDate(15);
   } else {
     d = new Date(d.getFullYear(), d.getMonth() + 1, 0);
   }
-  d = nextQBoundary(d);
   for (let i = 0; i < periodIdx; i++) d = nextQBoundary(d);
   return d;
 }
