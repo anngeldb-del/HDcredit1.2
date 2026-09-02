@@ -43,13 +43,11 @@ function qsElapsed(inicio, producto = 'quincenal_fijo') {
     return now >= due ? 1 : 0;
   }
   let d = new Date(start);
-  // Avanzar al cierre de la quincena de inicio
+  // Cierre de la quincena de inicio = vencimiento del primer pago.
+  // Sin quincena de gracia: los pagos siempre vencen los días 15 y 30/31.
   d.getDate() < 15
     ? d.setDate(15)
     : (d = new Date(d.getFullYear(), d.getMonth() + 1, 0));
-  // El primer pago vence en la quincena SIGUIENTE a la del inicio
-  // (el cliente tiene una quincena completa de gracia antes del primer cobro)
-  d = nextQBoundary(d);
   let count = 0;
   while (d < now && count < 36) {
     count++;
