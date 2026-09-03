@@ -26,10 +26,21 @@ function curQKey() {
 /* ============================================================
    ATRASADO — cálculo real por fechas
 ============================================================ */
+// Cierre de "segunda quincena" de un mes: día 30 fijo, salvo febrero
+// (que no tiene día 30) donde cae en su último día real (28 o 29).
+function finQuincena(y, m) {
+  const ultimoDia = new Date(y, m + 1, 0).getDate();
+  return Math.min(30, ultimoDia);
+}
+// Menor vencimiento (día 15 o 30) estrictamente posterior a d.
+// Si d cae justo en un vencimiento (15 o 30), salta al siguiente
+// — el día en que arranca o se paga una quincena no vuelve a vencer ese mismo día.
 function nextQBoundary(d) {
-  return d.getDate() === 15
-    ? new Date(d.getFullYear(), d.getMonth() + 1, 0)
-    : new Date(d.getFullYear(), d.getMonth() + 1, 15);
+  const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+  if (day < 15) return new Date(y, m, 15);
+  const fin = finQuincena(y, m);
+  if (day < fin) return new Date(y, m, fin);
+  return new Date(y, m + 1, 15);
 }
 function qsElapsed(inicio, producto = 'quincenal_fijo') {
   if (!inicio) return 0;
@@ -42,12 +53,9 @@ function qsElapsed(inicio, producto = 'quincenal_fijo') {
     due.setDate(due.getDate() + 30);
     return now >= due ? 1 : 0;
   }
-  let d = new Date(start);
-  // Cierre de la quincena de inicio = vencimiento del primer pago.
-  // Sin quincena de gracia: los pagos siempre vencen los días 15 y 30/31.
-  d.getDate() < 15
-    ? d.setDate(15)
-    : (d = new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  // Sin quincena de gracia: el primer pago vence en el primer día 15/30
+  // posterior al inicio, y de ahí en adelante siempre los días 15 y 30.
+  let d = nextQBoundary(start);
   let count = 0;
   while (d < now && count < 36) {
     count++;
