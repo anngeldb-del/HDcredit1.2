@@ -75,6 +75,101 @@ async function _generateXLSX() {
   toast('Excel descargado ✅', 'ok');
 }
 
+/* ============================================================
+   REPORTE DE CARTERA ACTIVA (por quincena)
+============================================================ */
+function descargarReporteCartera() {
+  if (typeof XLSX === 'undefined') {
+    toast('Cargando exportador Excel...', 'wrn');
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = _generarReporteCartera;
+    s.onerror = () => toast('Error al cargar librería Excel', 'err');
+    document.head.appendChild(s);
+  } else {
+    _generarReporteCartera();
+  }
+}
+
+function _generarReporteCartera() {
+  // Mismas cuentas que muestra Control de Cobros/Morosos: activas (con saldo),
+  // liquidadas excluidas — igual que el formato de referencia.
+  const activos = clientes.filter(c => (c.saldo || 0) > 0);
+  if (!activos.length) { toast('No hay cuentas activas para reportar', 'err'); return; }
+
+  const qselEl = document.getElementById('qsel');
+  const qKey = (qselEl && qselEl.value) || curQKey();
+  const labelQ = labelQuincenaLarga(qKey);
+
+  const cuentasActivas = activos.length;
+  const saldoPorCobrar = activos.reduce((a, c) => a + (c.saldo || 0), 0);
+  const cobroEsperadoQ = activos.reduce((a, c) => a + (c.pq || 0), 0);
+  const montoTotal = activos.reduce((a, c) => a + (c.monto || 0), 0);
+  const atrasados = activos.filter(c => calcAlerta(c) === 'ATRASADO').length;
+
+  const fmtFechaDMY = (iso) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
+  const filas = activos.map(c => [
+    c.nombre,
+    c.monto,
+    c.pq,
+    plazoLabel(c),
+    c.pagadas || 0,
+    (c.nq || 0) - (c.pagadas || 0),
+    c.saldo || 0,
+    calcAlerta(c) === 'ATRASADO' ? 'ATRASADO' : 'AL CORRIENTE',
+    fmtFechaDMY(c.inicio)
+  ]);
+
+  const hoy = new Date();
+  const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+
+  const STAT_VALUES_ROW = 6;              // fila 6 (1-indexed) = ['cuentasActivas','saldoPorCobrar','cobroEsperadoQ','atrasados']
+  const HEADER_ROW = 8;                   // fila 8 = encabezado NOMBRE/MONTO/...
+  const DATA_START_ROW = HEADER_ROW + 1;  // 9
+  const TOTALES_ROW = DATA_START_ROW + filas.length;
+
+  const aoa = [
+    ['HD Crédit'],
+    ['Reporte de Cartera Activa'],
+    ['QUINCENA', labelQ],
+    [],
+    ['CUENTAS ACTIVAS', 'SALDO POR COBRAR', 'COBRO ESPERADO / Q', 'ATRASADOS'],
+    [cuentasActivas, saldoPorCobrar, cobroEsperadoQ, atrasados],
+    [],
+    ['NOMBRE', 'MONTO', 'PAGO Q', 'PLAZO', 'Q PAGADAS', 'Q RESTANTES', 'SALDO', 'ESTADO', 'INICIO'],
+    ...filas,
+    [`TOTALES (${cuentasActivas} cuentas)`, montoTotal, cobroEsperadoQ, '', '', '', saldoPorCobrar, '', ''],
+    [],
+    [`Generado el ${fechaHoy} · Cuentas liquidadas excluidas`]
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:22},{wch:12},{wch:11},{wch:8},{wch:11},{wch:12},{wch:12},{wch:14},{wch:12}];
+
+  // Formato de moneda en las columnas de dinero (los montos se guardan como
+  // número, no como texto — así el Excel resultante permite sumar/filtrar).
+  const monedaFmt = '"$"#,##0';
+  const setMoneda = (addr) => { const cell = ws[addr]; if (cell) cell.z = monedaFmt; };
+  ['B', 'C'].forEach(col => setMoneda(col + STAT_VALUES_ROW));
+  for (let i = 0; i < filas.length; i++) {
+    const r = DATA_START_ROW + i;
+    ['B', 'C', 'G'].forEach(col => setMoneda(col + r));
+  }
+  ['B', 'C', 'G'].forEach(col => setMoneda(col + TOTALES_ROW));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Cartera Activa');
+
+  const slug = labelQ.replace(/\s+de\s+/i, '_').replace(/\s+/g, '');
+  XLSX.writeFile(wb, `HDCredit_CarteraActiva_${slug}.xlsx`);
+  toast('Reporte de Cartera descargado ✅', 'ok');
+}
+
 async function doExportJSON() {
   if (!clientes.length) { toast('No hay datos para exportar', 'err'); return; }
   // Igual que en el Excel: el respaldo debe incluir TODO el historial, no
