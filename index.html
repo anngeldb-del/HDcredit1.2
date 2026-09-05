@@ -347,6 +347,7 @@ tbody tr:last-child td{border-bottom:none}
     <div class="ni" onclick="gv('reportes')"><i class="fas fa-chart-bar"></i> Reportes</div>
     <div class="ni" onclick="doExport()"><i class="fas fa-file-csv"></i> Exportar CSV</div>
     <div class="ni" onclick="doExportXLSX()"><i class="fas fa-file-excel" style="color:#1d6f42"></i> Exportar Excel</div>
+    <div class="ni" onclick="descargarReporteCartera()"><i class="fas fa-file-invoice-dollar" style="color:#1d6f42"></i> Reporte de Cartera (Excel)</div>
     <div class="ni" onclick="doExportJSON()"><i class="fas fa-download"></i> Respaldo JSON</div>
     <div class="ni" onclick="doImportJSON()"><i class="fas fa-upload"></i> Restaurar JSON</div>
     <div class="ni" onclick="gv('dashboard')"><i class="fas fa-chart-pie"></i> Panel Principal</div>
@@ -417,6 +418,7 @@ tbody tr:last-child td{border-bottom:none}
     <div class="tw">
       <div class="ch-hd">
         <div class="qsel"><i class="fas fa-calendar" style="color:var(--accent)"></i><select id="qsel" onchange="renderCL()"></select></div>
+        <button class="btn btn-s btn-sm" onclick="descargarReporteCartera()" title="Descarga el reporte de cartera activa de esta quincena en Excel"><i class="fas fa-file-excel" style="color:#1d6f42"></i> Reporte</button>
         <span id="cl-prog" style="font-size:.82rem;color:var(--muted);margin-left:auto"></span>
       </div>
       <div style="padding:11px 18px;border-bottom:1px solid var(--border);background:var(--surface)">

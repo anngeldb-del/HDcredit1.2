@@ -17,6 +17,12 @@ function fmtQ(y, m, d) {
   const M = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   return `${d===15?'1ª':'2ª'} Q · ${M[m]} ${y}`;
 }
+// Etiqueta larga para el Reporte de Cartera Activa, ej. "Primera de Agosto 2026"
+function labelQuincenaLarga(qKey) {
+  const [y, m, d] = qKey.split('-').map(Number);
+  const M = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  return `${d === 15 ? 'Primera' : 'Segunda'} de ${M[m - 1]} ${y}`;
+}
 function curQKey() {
   const n = new Date(), y = n.getFullYear(), mo = n.getMonth();
   const d = n.getDate()<=15?15:new Date(y,mo+1,0).getDate();
